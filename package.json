@@ -1,0 +1,30 @@
+{
+  "name": "applyjobagent",
+  "version": "0.1.0",
+  "description": "Harness-agnostic job-application agent distro: a dossier-driven pipeline + local chat/review UI, operated by any AI CLI harness (Claude Code, Codex, Cursor, ZCode, Gemini CLI, ...).",
+  "type": "module",
+  "license": "MIT",
+  "author": "Mayank Asthana",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mayankasthana/applyjobagent.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "axa": "bin/axa.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "test:watch": "node --test --watch test/"
+  },
+  "keywords": [
+    "agent",
+    "ai",
+    "job-search",
+    "resume",
+    "agents-md",
+    "cli"
+  ]
+}
