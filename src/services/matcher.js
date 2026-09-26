@@ -28,13 +28,22 @@ export function scoreMatch(jobDescription, dossierIndex, { indexer = null, now =
 
   const matched = [];
   const missing = [];
+  let weightTotal = 0;
+  let weightMatched = 0;
   for (const { term, count } of jdTerms) {
-    if (dossierTerms.has(term)) matched.push({ term, count });
-    else missing.push(term);
+    weightTotal += count;
+    if (dossierTerms.has(term)) {
+      matched.push({ term, count });
+      weightMatched += count;
+    } else {
+      missing.push(term);
+    }
   }
   missing.sort((a, b) => b.length - a.length || a.localeCompare(b)); // longer/specific first
 
-  const coverage = jdTerms.length === 0 ? 0 : matched.length / jdTerms.length;
+  // Frequency-weighted coverage: a term the JD repeats matters more than a
+  // one-off mention (company names, boilerplate), so noise drags less.
+  const coverage = weightTotal === 0 ? 0 : weightMatched / weightTotal;
   const score = Math.round(coverage * 100);
 
   const report = { score, grade: grade(score), matched, missing, coverage: Math.round(coverage * 1000) / 1000, at: now };

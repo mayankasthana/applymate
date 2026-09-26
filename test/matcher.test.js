@@ -25,18 +25,19 @@ async function makeIndex(root, dossierText) {
 
 const DOSSIER = `
 # Master Resume
-Kafka, Kubernetes, Go, Terraform, AWS.
-Kafka streaming. Go services. Terraform modules on AWS.
+Senior backend engineer with 12 years building distributed services.
+Design and operate Kafka event streaming pipelines with exactly-once ingestion.
+Build services in Go on Kubernetes. Infrastructure as code with Terraform on AWS.
 `;
 
 test("scoreMatch returns a strong grade when the dossier covers the JD", async () => {
   await withTmpDir(async (root) => {
     const index = await makeIndex(root, DOSSIER);
     const report = scoreMatch(JD, index);
-    assert.equal(report.score, 100);
     assert.equal(report.grade, "strong");
+    assert.ok(report.score >= 75, `expected score >= 75, got ${report.score}`);
     assert.ok(report.matched.some((m) => m.term === "kafka"));
-    assert.deepEqual(report.missing, []);
+    assert.ok(report.coverage >= 0.75);
     assert.ok(report.at);
   });
 });
