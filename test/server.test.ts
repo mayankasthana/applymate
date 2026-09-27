@@ -2,12 +2,30 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
+import { request } from "node:http";
 import type { Server } from "node:http";
 
 import { runServer } from "../src/server.ts";
 import { saveConfig, type Config } from "../src/config.ts";
 import { makeServices } from "../src/workspace.ts";
 import { withTmpDir } from "./helpers.ts";
+
+/** GET with a forged Host header — how a rebinding attack would arrive. */
+function getWithHost(base: string, host: string, path = "/api/state"): Promise<{ status: number; body: string }> {
+  const url = new URL(base);
+  return new Promise((resolve, reject) => {
+    const req = request(
+      { host: url.hostname, port: url.port, path, method: "GET", headers: { host } },
+      (res) => {
+        let body = "";
+        res.on("data", (c: Buffer) => (body += c.toString("utf8")));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
 
 interface Running {
   server: Server;
@@ -142,6 +160,20 @@ test("artifact endpoint serves evidence screenshots with an image content-type",
     assert.equal(res.status, 200);
     assert.match(res.headers.get("content-type") ?? "", /^image\/png/);
     assert.deepEqual(Buffer.from(await res.arrayBuffer()), png);
+  });
+});
+
+test("rejects non-loopback Host headers (DNS rebinding guard)", async () => {
+  await withServer(async ({ base }) => {
+    const port = new URL(base).port;
+    const evil = await getWithHost(base, "evil.example.com");
+    assert.equal(evil.status, 403);
+    const rebound = await getWithHost(base, `evil.example.com:${port}`);
+    assert.equal(rebound.status, 403);
+    const ok = await getWithHost(base, `localhost:${port}`);
+    assert.equal(ok.status, 200);
+    const loopback = await getWithHost(base, `127.0.0.1:${port}`);
+    assert.equal(loopback.status, 200);
   });
 });
 
