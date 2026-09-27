@@ -2,6 +2,8 @@
 
 > **Aja** — your job-application first mate. Talk to one agent. Land the role.
 
+[![CI](https://github.com/mayankasthana/applymate/actions/workflows/ci.yml/badge.svg)](https://github.com/mayankasthana/applymate/actions/workflows/ci.yml)
+
 A harness-agnostic **agent distro** for the job-application workflow, in the
 spirit of [firstmate](https://github.com/kunchenguid/firstmate): the repo *is*
 the agent. Open any AI CLI harness in this directory and it reads `AGENTS.md`
@@ -58,6 +60,24 @@ npm run applymate -- chat serve        # http://127.0.0.1:4388 — pipeline + ch
 Full docs: [`docs/scripts.md`](docs/scripts.md) (toolbelt reference),
 [`docs/workflow.md`](docs/workflow.md) (architecture & loops),
 [`AGENTS.md`](AGENTS.md) (the agent contract).
+
+## Responsible use
+
+Applymate automates actions a candidate could take themselves, and it is built
+to stay on the right side of that line:
+
+- **Submission is human-gated.** The agent never clicks a final Submit without
+  the candidate's explicit, per-application confirmation — the status machine
+  and the agent contract (`AGENTS.md`) enforce it.
+- **No CAPTCHA or anti-bot evasion, ever.** Verification challenges are handed
+  back to the candidate. There is no fingerprint spoofing, stealth tooling, or
+  proxy trickery in this repo; PRs adding any will be declined.
+- **Human pacing is built in.** One unhurried session per site, natural
+  pauses, human typing rhythm, human-scale volume — see "Act like a careful
+  human in the browser" in [`AGENTS.md`](AGENTS.md).
+- **You own compliance and accuracy.** You are responsible for following the
+  terms of service of every job board or portal you point Applymate at, and
+  for the truthfulness of everything it helps you submit.
 
 ## License
 
