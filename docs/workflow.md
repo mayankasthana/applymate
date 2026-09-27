@@ -6,7 +6,7 @@ This repo is an **agent distro**, in the spirit of
 [firstmate](https://github.com/kunchenguid/firstmate): the repo *is* the agent.
 Open any AI CLI harness in this directory and it reads `AGENTS.md` and becomes
 Aja. All judgment, reading, and writing belongs to the harness's model; all
-bookkeeping belongs to `bin/axa.ts`, a deterministic, dependency-free toolbelt.
+bookkeeping belongs to `bin/applymate.ts`, a deterministic, dependency-free toolbelt.
 State is files on disk, so any harness, any session, picks up where the last
 stopped.
 
@@ -23,7 +23,7 @@ markdown — tailored resumes are reviewed in the browser, not the terminal.
  harness (Claude Code / Codex / Cursor / ZCode / Gemini / Antigravity)
     │  reads AGENTS.md → becomes Aja
     ▼
- bin/axa.ts ── services ── adapters ── workspace/ (jobs, applications, profile, dossier index)
+ bin/applymate.ts ── services ── adapters ── workspace/ (jobs, applications, profile, dossier index)
     ▲
  dossier dir (your resumes — referenced by config, never copied into the repo)
 ```
@@ -61,7 +61,7 @@ workspace/
   profile/answers.json           form-question memory (browser autofill)
   chat/log.jsonl                 the conversation queue (1 JSON message per line)
   dossier/index.json             indexed dossier (keywords, sections, kinds)
-axa.config.json                  settings (dossierDir, minMatchScore, ...)
+applymate.config.json                  settings (dossierDir, minMatchScore, ...)
 ```
 
 Writes are atomic (temp + rename). The chat log tolerates a torn trailing line.

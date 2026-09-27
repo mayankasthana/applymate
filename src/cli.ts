@@ -30,8 +30,8 @@ interface Command {
 }
 
 /**
- * The axa toolbelt. Every command maps (positionals, flags, io) -> exit code,
- * so the CLI is fully testable without spawning a process. `bin/axa.ts` is
+ * The applymate toolbelt. Every command maps (positionals, flags, io) -> exit code,
+ * so the CLI is fully testable without spawning a process. `bin/applymate.ts` is
  * the thin executable shim.
  */
 export async function runCommand(argv: string[], { rootDir, stdout, stderr }: { rootDir: string } & Io): Promise<number> {
@@ -75,7 +75,7 @@ function jsonOut(io: Io, value: unknown): number {
 }
 
 function failWith(io: Io, usage: string, message: string): 1 {
-  io.stderr.write(`error: ${message}\nusage: axa ${usage}\n`);
+  io.stderr.write(`error: ${message}\nusage: applymate ${usage}\n`);
   return 1;
 }
 
@@ -100,8 +100,8 @@ async function cmdInit({ io, rootDir }: CommandContext): Promise<number> {
   const config = await saveConfig(rootDir, {});
   const paths = await ensureWorkspace(config);
   line(io, `workspace ready at ${paths.root}`);
-  line(io, `next: axa config set --key dossierDir --value ~/path/to/your/dossier`);
-  line(io, `then: axa dossier index`);
+  line(io, `next: applymate config set --key dossierDir --value ~/path/to/your/dossier`);
+  line(io, `then: applymate dossier index`);
   return 0;
 }
 
@@ -193,7 +193,7 @@ async function cmdJobList({ flags, io, rootDir }: CommandContext): Promise<numbe
   const { pipeline } = await services(rootDir);
   const jobs = await pipeline.listJobs();
   if (flags.json) return jsonOut(io, jobs);
-  if (!jobs.length) line(io, "no jobs yet — try: axa job add");
+  if (!jobs.length) line(io, "no jobs yet — try: applymate job add");
   for (const j of jobs) line(io, `${j.id}  ${j.company} — ${j.title}${j.matchScore !== null ? `  [match ${j.matchScore}]` : ""}`);
   return 0;
 }
@@ -348,7 +348,7 @@ async function cmdAppSubmitted({ pos, flags, io, rootDir }: CommandContext): Pro
   });
   if (flags.json) return jsonOut(io, app);
   line(io, `${app.id}: submitted at ${app.submittedAt}${app.submissionPortal ? ` via ${app.submissionPortal}` : ""}${app.submissionConfirmation ? ` (confirmation ${app.submissionConfirmation})` : ""}`);
-  line(io, `evidence tip: node bin/axa.ts app evidence ${id} submit.png --kind submit-screenshot`);
+  line(io, `evidence tip: node bin/applymate.ts app evidence ${id} submit.png --kind submit-screenshot`);
   return 0;
 }
 
@@ -376,7 +376,7 @@ async function matchJobAgainstDossier(svc: Services, jobId: string): Promise<{ r
     throw new Error("no dossier configured (config set --key dossierDir --value ~/path)");
   }
   const index = await loadDossierIndex(workspacePaths(config).dossierIndex).catch(() => null);
-  if (!index) throw new Error("dossier not indexed yet — run: axa dossier index");
+  if (!index) throw new Error("dossier not indexed yet — run: applymate dossier index");
 
   const job = await svc.pipeline.getJob(jobId);
   const indexer = new DossierIndexer(config._dossierRoot);
@@ -476,7 +476,7 @@ async function cmdAnswersGet({ pos, flags, io, rootDir }: CommandContext): Promi
   const record = await profile.findAnswer(question);
   if (flags.json) return jsonOut(io, record);
   if (!record) {
-    line(io, "(no stored answer — ask the candidate, then: axa answers set)");
+    line(io, "(no stored answer — ask the candidate, then: applymate answers set)");
     return 1;
   }
   line(io, record.answer);
@@ -564,7 +564,7 @@ function printHelp(io: Io, code = 0): number {
   const target = code === 0 ? io.stdout : io.stderr;
   target.write(
     [
-      "usage: axa <command> [args] [--json] [--debug]",
+      "usage: applymate <command> [args] [--json] [--debug]",
       "",
       "workspace:",
       "  init                            scaffold config + workspace",

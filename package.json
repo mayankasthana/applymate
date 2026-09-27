@@ -1,25 +1,25 @@
 {
-  "name": "applyjobagent",
+  "name": "applymate",
   "version": "0.1.0",
-  "description": "Harness-agnostic job-application agent distro: a dossier-driven pipeline + local chat/review UI, operated by any AI CLI harness (Claude Code, Codex, Cursor, ZCode, Gemini CLI, ...).",
+  "description": "Applymate — harness-agnostic job-application agent distro: a dossier-driven pipeline + local chat/review UI, operated by any AI CLI harness (Claude Code, Codex, Cursor, ZCode, Gemini CLI, ...).",
   "type": "module",
   "license": "MIT",
   "author": "Mayank Asthana",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mayankasthana/applyjobagent.git"
+    "url": "git+https://github.com/mayankasthana/applymate.git"
   },
   "engines": {
     "node": ">=24"
   },
   "bin": {
-    "axa": "bin/axa.ts"
+    "applymate": "bin/applymate.ts"
   },
   "scripts": {
     "test": "node --test --test-force-exit test/*.test.ts",
     "test:watch": "node --test --watch --test-force-exit test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "axa": "node bin/axa.ts"
+    "applymate": "node bin/applymate.ts"
   },
   "keywords": [
     "agent",

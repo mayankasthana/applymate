@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export async function makeTmpDir(prefix = "axa-test-"): Promise<string> {
+export async function makeTmpDir(prefix = "applymate-test-"): Promise<string> {
   return mkdtemp(join(tmpdir(), prefix));
 }
 

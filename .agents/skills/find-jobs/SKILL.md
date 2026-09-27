@@ -5,7 +5,7 @@ description: Find job postings relevant to the candidate's dossier and preferenc
 
 # Find relevant jobs
 
-1. Load the candidate's filters: `node bin/axa.ts prefs list`. If `companyType`,
+1. Load the candidate's filters: `node bin/applymate.ts prefs list`. If `companyType`,
    `salaryFloor`, `workMode`, `locations`, or `seniority` are missing, ask
    before searching. Respect them strictly — e.g. skip service-based shops when
    the candidate prefers product-based companies.
@@ -13,16 +13,16 @@ description: Find job postings relevant to the candidate's dossier and preferenc
    company career pages with the browser tools: official search boxes and
    filters, unhurried, page by page — never bulk scraping or parallel crawls.
    Capture each promising JD's full text. Without browser tools, work from
-   postings you are given. For each: `node bin/axa.ts job add --company ... --title ... --file jd.md --url <posting url>`.
+   postings you are given. For each: `node bin/applymate.ts job add --company ... --title ... --file jd.md --url <posting url>`.
 3. **Evidence before moving on** — postings vanish: screenshot the posting page
    (harness browser tools save PNG) and file it:
-   `node bin/axa.ts job evidence <jobId> shot.png --kind jd-screenshot --url <posting url>`.
+   `node bin/applymate.ts job evidence <jobId> shot.png --kind jd-screenshot --url <posting url>`.
    For tricky pages also save print-to-PDF/HTML with `--kind jd-snapshot`.
-4. Score every posting: `node bin/axa.ts job match <jobId>`. The toolbelt
+4. Score every posting: `node bin/applymate.ts job match <jobId>`. The toolbelt
    refuses applications below `config minMatchScore`; report the gate, do not
    route around it.
 5. Shortlist in chat (`chat reply`): company — title — score/grade — one-line
    "why it fits" — notable missing skills. Let the candidate choose; only then
-   run `node bin/axa.ts app start <jobId>`.
+   run `node bin/applymate.ts app start <jobId>`.
 
 $ARGUMENTS

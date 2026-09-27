@@ -3,7 +3,7 @@ workspace/
 !workspace/.gitkeep
 
 # Settings point at the captain's dossier — machine-local, never committed.
-axa.config.json
+applymate.config.json
 
 # OS / editor noise
 .DS_Store

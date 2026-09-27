@@ -1,14 +1,14 @@
-# The axa toolbelt — command reference
+# The applymate toolbelt — command reference
 
-Every command: `node bin/axa.ts <command> [args] [--json]`. Add `--json` for
-machine-readable output. Run from the repo root so `axa.config.json` and
+Every command: `node bin/applymate.ts <command> [args] [--json]`. Add `--json` for
+machine-readable output. Run from the repo root so `applymate.config.json` and
 `workspace/` resolve.
 
 ## Setup
 
 | command | what it does |
 |---|---|
-| `init` | Scaffold `axa.config.json` + `workspace/` directories (idempotent) |
+| `init` | Scaffold `applymate.config.json` + `workspace/` directories (idempotent) |
 | `config get [key]` | Print one or all settings |
 | `config set <key> <value>` | Update a setting (validated, atomic write) |
 

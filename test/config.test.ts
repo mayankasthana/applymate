@@ -21,7 +21,7 @@ test("loadConfig returns defaults when no config file exists", async () => {
 
 test("loadConfig merges a stored file over the defaults", async () => {
   await withTmpDir(async (root) => {
-    await writeFile(join(root, "axa.config.json"), JSON.stringify({ dossierDir: "~/dossier", chatPort: 5000 }));
+    await writeFile(join(root, "applymate.config.json"), JSON.stringify({ dossierDir: "~/dossier", chatPort: 5000 }));
     const cfg = await loadConfig(root);
     assert.equal(cfg.dossierDir, "~/dossier");
     assert.equal(cfg.chatPort, 5000);
@@ -31,7 +31,7 @@ test("loadConfig merges a stored file over the defaults", async () => {
 
 test("loadConfig rejects unknown keys", async () => {
   await withTmpDir(async (root) => {
-    await writeFile(join(root, "axa.config.json"), JSON.stringify({ nope: 1 }));
+    await writeFile(join(root, "applymate.config.json"), JSON.stringify({ nope: 1 }));
     await assert.rejects(
       () => loadConfig(root),
       (err) => err instanceof ConfigError && /unknown config key/i.test(err.message)
@@ -41,21 +41,21 @@ test("loadConfig rejects unknown keys", async () => {
 
 test("loadConfig rejects an invalid autonomy value", async () => {
   await withTmpDir(async (root) => {
-    await writeFile(join(root, "axa.config.json"), JSON.stringify({ autonomy: "full-auto-submit" }));
+    await writeFile(join(root, "applymate.config.json"), JSON.stringify({ autonomy: "full-auto-submit" }));
     await assert.rejects(() => loadConfig(root), ConfigError);
   });
 });
 
 test("loadConfig rejects an invalid minMatchScore", async () => {
   await withTmpDir(async (root) => {
-    await writeFile(join(root, "axa.config.json"), JSON.stringify({ minMatchScore: 250 }));
+    await writeFile(join(root, "applymate.config.json"), JSON.stringify({ minMatchScore: 250 }));
     await assert.rejects(() => loadConfig(root), ConfigError);
   });
 });
 
 test("loadConfig rejects malformed JSON with a readable error", async () => {
   await withTmpDir(async (root) => {
-    await writeFile(join(root, "axa.config.json"), "{not json");
+    await writeFile(join(root, "applymate.config.json"), "{not json");
     await assert.rejects(() => loadConfig(root), ConfigError);
   });
 });
@@ -63,7 +63,7 @@ test("loadConfig rejects malformed JSON with a readable error", async () => {
 test("saveConfig writes defaults + patch and a later load sees them", async () => {
   await withTmpDir(async (root) => {
     await saveConfig(root, { dossierDir: "~/cv" });
-    const raw = JSON.parse(await readFile(join(root, "axa.config.json"), "utf8"));
+    const raw = JSON.parse(await readFile(join(root, "applymate.config.json"), "utf8"));
     assert.equal(raw.dossierDir, "~/cv");
     assert.equal(raw.autonomy, "draft");
 
@@ -77,7 +77,7 @@ test("saveConfig writes defaults + patch and a later load sees them", async () =
 test("saveConfig rejects invalid patches and writes nothing", async () => {
   await withTmpDir(async (root) => {
     await assert.rejects(() => saveConfig(root, { autonomy: "bogus" as never }), ConfigError);
-    await assert.rejects(() => readFile(join(root, "axa.config.json")), { code: "ENOENT" });
+    await assert.rejects(() => readFile(join(root, "applymate.config.json")), { code: "ENOENT" });
   });
 });
 
