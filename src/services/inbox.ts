@@ -1,9 +1,24 @@
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { mkdir } from "node:fs/promises";
 
-const SENDERS = new Set(["user", "agent"]);
+const SENDERS: ReadonlySet<string> = new Set(["user", "agent"]);
 const POLL_INTERVAL_MS = 200;
+
+export type Sender = "user" | "agent";
+
+export interface ChatMessage {
+  id: number;
+  at: string;
+  from: Sender;
+  text: string;
+  meta?: unknown;
+}
+
+export interface ChatAppendInput {
+  from: Sender;
+  text: string;
+  meta?: unknown;
+}
 
 /**
  * Service: the chat queue between the human (web UI) and the agent (CLI).
@@ -14,13 +29,16 @@ const POLL_INTERVAL_MS = 200;
  * which makes the whole thing restart-proof.
  */
 export class ChatLog {
-  constructor({ filePath, now = () => new Date().toISOString() }) {
+  readonly filePath: string;
+  readonly #now: () => string;
+
+  constructor({ filePath, now = () => new Date().toISOString() }: { filePath: string; now?: () => string }) {
     this.filePath = filePath;
-    this.now = now;
+    this.#now = now;
   }
 
   /** Append a message; returns the stored record with id/at filled in. */
-  async append({ from, text, meta = null }) {
+  async append({ from, text, meta = null }: ChatAppendInput): Promise<ChatMessage> {
     if (!SENDERS.has(from)) {
       throw new Error(`message "from" must be one of ${[...SENDERS].join(", ")}, got: ${from}`);
     }
@@ -28,14 +46,14 @@ export class ChatLog {
       throw new Error(`message "text" must be a non-empty string`);
     }
     const lastId = await this.latestId();
-    const record = { id: lastId + 1, at: this.now(), from, text, ...(meta ? { meta } : {}) };
+    const record: ChatMessage = { id: lastId + 1, at: this.#now(), from, text, ...(meta ? { meta } : {}) };
     await mkdir(dirname(this.filePath), { recursive: true });
     await appendFile(this.filePath, `${JSON.stringify(record)}\n`, "utf8");
     return record;
   }
 
   /** Messages with id > since, oldest first. */
-  async list({ since = 0 } = {}) {
+  async list({ since = 0 }: { since?: number } = {}): Promise<ChatMessage[]> {
     return (await this.#load()).filter((m) => m.id > since);
   }
 
@@ -43,7 +61,7 @@ export class ChatLog {
    * Return user messages newer than `since`; if none, wait up to waitMs
    * polling the file (long-poll). Agent messages never satisfy a poll.
    */
-  async poll({ since = 0, waitMs = 0 } = {}) {
+  async poll({ since = 0, waitMs = 0 }: { since?: number; waitMs?: number } = {}): Promise<ChatMessage[]> {
     const deadline = Date.now() + waitMs;
     for (;;) {
       const fresh = (await this.list({ since })).filter((m) => m.from === "user");
@@ -54,28 +72,28 @@ export class ChatLog {
   }
 
   /** Highest message id currently on disk (0 when empty). */
-  async latestId() {
+  async latestId(): Promise<number> {
     const all = await this.#load();
-    return all.length ? all[all.length - 1].id : 0;
+    return all.length ? all[all.length - 1]!.id : 0;
   }
 
   /**
    * Parse the log, tolerating a torn trailing line (a write interrupted
    * mid-line). New appends continue from the last good id.
    */
-  async #load() {
-    let raw;
+  async #load(): Promise<ChatMessage[]> {
+    let raw: string;
     try {
       raw = await readFile(this.filePath, "utf8");
     } catch (err) {
-      if (err.code === "ENOENT") return [];
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
     }
-    const messages = [];
+    const messages: ChatMessage[] = [];
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
       try {
-        const record = JSON.parse(line);
+        const record = JSON.parse(line) as ChatMessage;
         if (SENDERS.has(record.from) && typeof record.text === "string" && Number.isInteger(record.id)) {
           messages.push(record);
         }

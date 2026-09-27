@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { extractTerms, termCounts, topTerms } from "../src/services/terms.js";
+import { extractTerms, termCounts, topTerms } from "../src/services/terms.ts";
 
 test("extractTerms lowercases, splits, and keeps tech tokens intact", () => {
   const terms = extractTerms("Built services in Go and Kubernetes; also C++ and CI/CD pipelines on node.js.");
@@ -22,7 +22,7 @@ test("extractTerms drops stopwords and single-char tokens, keeps 2-char tech ter
   assert.deepEqual(extractTerms("go js ai"), ["go", "js", "ai"]);
 });
 
-test("extractTerms splits camelCase and dash_case words", () => {
+test("extractTerms splits dash_case words", () => {
   const terms = extractTerms("KafkaStreams and event_driven design");
   assert.ok(terms.includes("kafkastreams"));
   assert.ok(terms.includes("event"));
@@ -39,7 +39,7 @@ test("topTerms returns most frequent first, respecting minCount", () => {
   const counts = termCounts("go go go rust rust python");
   const top = topTerms(counts, { limit: 10, minCount: 2 });
   assert.deepEqual(top.map((t) => t.term), ["go", "rust"]);
-  assert.equal(top[0].count, 3);
+  assert.equal(top[0]!.count, 3);
 });
 
 test("handles empty and null input", () => {

@@ -3,23 +3,25 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
-import { loadConfig, saveConfig, DEFAULT_CONFIG, configError } from "../src/config.js";
-import { withTmpDir } from "./helpers.js";
+import { loadConfig, saveConfig, DEFAULT_CONFIG, ConfigError, type Config } from "../src/config.ts";
+import { withTmpDir } from "./helpers.ts";
+
+const persisted = (cfg: Config): Record<string, unknown> => {
+  const { _root, _configPath, _workspaceRoot, _dossierRoot, ...rest } = cfg;
+  void _root; void _configPath; void _workspaceRoot; void _dossierRoot;
+  return rest;
+};
 
 test("loadConfig returns defaults when no config file exists", async () => {
   await withTmpDir(async (root) => {
     const cfg = await loadConfig(root);
-    const { _root, _configPath, _workspaceRoot, _dossierRoot, ...persisted } = cfg;
-    assert.deepEqual(persisted, DEFAULT_CONFIG);
+    assert.deepEqual(persisted(cfg), { ...DEFAULT_CONFIG });
   });
 });
 
 test("loadConfig merges a stored file over the defaults", async () => {
   await withTmpDir(async (root) => {
-    await writeFile(
-      join(root, "axa.config.json"),
-      JSON.stringify({ dossierDir: "~/dossier", chatPort: 5000 })
-    );
+    await writeFile(join(root, "axa.config.json"), JSON.stringify({ dossierDir: "~/dossier", chatPort: 5000 }));
     const cfg = await loadConfig(root);
     assert.equal(cfg.dossierDir, "~/dossier");
     assert.equal(cfg.chatPort, 5000);
@@ -29,31 +31,32 @@ test("loadConfig merges a stored file over the defaults", async () => {
 
 test("loadConfig rejects unknown keys", async () => {
   await withTmpDir(async (root) => {
-    await writeFile(
-      join(root, "axa.config.json"),
-      JSON.stringify({ nope: 1 })
+    await writeFile(join(root, "axa.config.json"), JSON.stringify({ nope: 1 }));
+    await assert.rejects(
+      () => loadConfig(root),
+      (err) => err instanceof ConfigError && /unknown config key/i.test(err.message)
     );
-    await assert.rejects(() => loadConfig(root), (err) => {
-      assert.match(err.message, /unknown config key/i);
-      return configError.is(err);
-    });
   });
 });
 
 test("loadConfig rejects an invalid autonomy value", async () => {
   await withTmpDir(async (root) => {
-    await writeFile(
-      join(root, "axa.config.json"),
-      JSON.stringify({ autonomy: "full-auto-submit" })
-    );
-    await assert.rejects(() => loadConfig(root), configError.ConfigError);
+    await writeFile(join(root, "axa.config.json"), JSON.stringify({ autonomy: "full-auto-submit" }));
+    await assert.rejects(() => loadConfig(root), ConfigError);
+  });
+});
+
+test("loadConfig rejects an invalid minMatchScore", async () => {
+  await withTmpDir(async (root) => {
+    await writeFile(join(root, "axa.config.json"), JSON.stringify({ minMatchScore: 250 }));
+    await assert.rejects(() => loadConfig(root), ConfigError);
   });
 });
 
 test("loadConfig rejects malformed JSON with a readable error", async () => {
   await withTmpDir(async (root) => {
     await writeFile(join(root, "axa.config.json"), "{not json");
-    await assert.rejects(() => loadConfig(root), configError.ConfigError);
+    await assert.rejects(() => loadConfig(root), ConfigError);
   });
 });
 
@@ -73,15 +76,16 @@ test("saveConfig writes defaults + patch and a later load sees them", async () =
 
 test("saveConfig rejects invalid patches and writes nothing", async () => {
   await withTmpDir(async (root) => {
-    await assert.rejects(() => saveConfig(root, { autonomy: "bogus" }), configError.ConfigError);
+    await assert.rejects(() => saveConfig(root, { autonomy: "bogus" as never }), ConfigError);
     await assert.rejects(() => readFile(join(root, "axa.config.json")), { code: "ENOENT" });
   });
 });
 
-test("workspaceRoot resolves the workspace under the repo root", async () => {
+test("derived paths resolve under the repo root", async () => {
   await withTmpDir(async (root) => {
     const cfg = await loadConfig(root);
     assert.equal(cfg._workspaceRoot, join(root, "workspace"));
     assert.equal(cfg._root, root);
+    assert.equal(cfg._dossierRoot, null);
   });
 });

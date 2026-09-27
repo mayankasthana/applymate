@@ -1,0 +1,158 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { readFile } from "node:fs/promises";
+import { join, resolve, sep, extname } from "node:path";
+
+import type { Config } from "./config.ts";
+import { ensureWorkspace, makeServices, workspacePaths, type Services } from "./workspace.ts";
+import { UI_HTML } from "./server-ui.ts";
+import { renderDocument } from "./services/markdown.ts";
+import { loadDossierIndex } from "./services/dossier.ts";
+import { scoreMatch } from "./services/matcher.ts";
+import { writeJsonAtomic } from "./fsutil.ts";
+
+const MAX_BODY_BYTES = 1_000_000;
+const RENDERABLE = /\.(md|markdown|txt)$/i;
+
+/**
+ * The local chat/review UI (lavish-axi style): a single-page app served on
+ * loopback. The human sends messages and reviews artifacts; the agent polls
+ * the same queue through the CLI. Loopback bind + workspace-sandboxed file
+ * routes keep personal data on this machine.
+ */
+export function runServer({ config, port, log = () => {} }: { config: Config; port?: number; log?: (msg: string) => void }): Promise<Server> {
+  const services = makeServices(config);
+  const server = createServer((req, res) => {
+    handle({ req, res, services }).catch((err) => {
+      if (!res.headersSent) sendJson(res, 500, { error: (err as Error).message });
+      else res.end();
+    });
+  });
+  return new Promise((ok) => {
+    server.listen(port ?? config.chatPort, "127.0.0.1", () => {
+      const addr = server.address();
+      const actual = typeof addr === "object" && addr ? addr.port : port ?? config.chatPort;
+      log(`Aja review UI: http://127.0.0.1:${actual}  (ctrl-c to stop)`);
+      ok(server);
+    });
+  });
+}
+
+async function handle({ req, res, services }: { req: IncomingMessage; res: ServerResponse; services: Services }): Promise<void> {
+  const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  const path = url.pathname;
+  const method = req.method ?? "GET";
+
+  if (method === "GET" && (path === "/" || path === "/index.html")) {
+    return sendHtml(res, 200, UI_HTML);
+  }
+
+  if (method === "GET" && path === "/api/state") {
+    const [pipeline, prefs, missing] = await Promise.all([
+      services.pipeline.pipeline(),
+      services.profile.preferences(),
+      services.profile.missingPreferences(),
+    ]);
+    return sendJson(res, 200, {
+      pipeline,
+      preferences: prefs,
+      missingPreferences: missing,
+      latestMessageId: await services.chat.latestId(),
+      dossierIndexed: await fileExists(services.paths.dossierIndex),
+    });
+  }
+
+  if (method === "GET" && path === "/api/chat") {
+    const since = Number(url.searchParams.get("since") ?? 0) || 0;
+    return sendJson(res, 200, await services.chat.list({ since }));
+  }
+
+  if (method === "POST" && path === "/api/chat") {
+    const body = await readJson(req);
+    const record = await services.chat.append({ from: "user", text: String(body.text ?? "") });
+    return sendJson(res, 201, record);
+  }
+
+  if (method === "POST" && path === "/api/prefs") {
+    const body = await readJson(req);
+    if (!body.key) return sendJson(res, 400, { error: "key is required" });
+    const record = await services.profile.setPreference(String(body.key), body.value as never, { source: "chat" });
+    return sendJson(res, 201, record);
+  }
+
+  const appMatch = path.match(/^\/api\/application\/([a-z0-9._-]+)$/i);
+  if (method === "GET" && appMatch) {
+    const app = await services.pipeline.getApplication(appMatch[1]!);
+    const job = await services.pipeline.getJob(app.jobId).catch(() => null);
+    return sendJson(res, 200, { ...app, job });
+  }
+
+  if (method === "GET" && path === "/api/artifact") {
+    const rel = url.searchParams.get("path") ?? "";
+    return serveArtifact(res, services, rel);
+  }
+
+  if (method === "POST" && path === "/api/match") {
+    // Re-score an existing job from the UI (uses the dossier index on disk).
+    const body = await readJson(req);
+    const jobId = String(body.jobId ?? "");
+    const job = await services.pipeline.getJob(jobId).catch(() => null);
+    if (!job) return sendJson(res, 404, { error: `no job ${jobId}` });
+    const index = await loadDossierIndex(services.paths.dossierIndex).catch(() => null);
+    if (!index) return sendJson(res, 409, { error: "dossier not indexed yet" });
+    const report = scoreMatch(job.description, index);
+    await services.pipeline.setJobMatch(jobId, { score: report.score });
+    return sendJson(res, 200, { jobId, score: report.score, grade: report.grade, missing: report.missing });
+  }
+
+  if (path.startsWith("/api/")) return sendJson(res, 404, { error: "no such api route" });
+  return sendHtml(res, 404, "<h1>404</h1>");
+}
+
+async function serveArtifact(res: ServerResponse, services: Services, rel: string): Promise<void> {
+  const root = resolve(services.paths.root);
+  const target = resolve(join(root, rel));
+  if (!rel || !target.startsWith(root + sep)) {
+    return sendJson(res, 403, { error: "path escapes workspace" });
+  }
+  let content: string;
+  try {
+    content = await readFile(target, "utf8");
+  } catch {
+    return sendJson(res, 404, { error: `no such artifact: ${rel}` });
+  }
+  if (RENDERABLE.test(extname(target)) || RENDERABLE.test(target)) {
+    return sendHtml(res, 200, renderDocument(content, { title: rel }));
+  }
+  return sendHtml(res, 200, `<pre>${content.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</pre>`);
+}
+
+async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > MAX_BODY_BYTES) throw new Error("request body too large");
+    chunks.push(chunk as Buffer);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  return readFile(path)
+    .then(() => true)
+    .catch(() => false);
+}
+
+function sendJson(res: ServerResponse, status: number, value: unknown): void {
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(value));
+}
+
+function sendHtml(res: ServerResponse, status: number, html: string): void {
+  res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  res.end(html);
+}

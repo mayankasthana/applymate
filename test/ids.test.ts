@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { slugify, makeId, shortCode } from "../src/ids.js";
+import { slugify, makeId, shortCode } from "../src/ids.ts";
 
 test("slugify lowercases, strips punctuation, and joins with dashes", () => {
   assert.equal(slugify("Senior Backend Engineer"), "senior-backend-engineer");

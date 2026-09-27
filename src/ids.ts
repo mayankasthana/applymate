@@ -5,7 +5,7 @@ const CODE_LENGTH = 4;
 const MAX_SLUG_LENGTH = 48;
 
 /** "Senior Backend Engineer" -> "senior-backend-engineer" */
-export function slugify(text) {
+export function slugify(text: string | null | undefined): string {
   const slug = String(text ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -16,7 +16,7 @@ export function slugify(text) {
 }
 
 /** Short random suffix, e.g. "k3f9". */
-export function shortCode() {
+export function shortCode(): string {
   let out = "";
   for (let i = 0; i < CODE_LENGTH; i++) {
     out += ALPHABET[randomInt(ALPHABET.length)];
@@ -25,7 +25,7 @@ export function shortCode() {
 }
 
 /** "job-acme-corp-xxxx" — collision-resistant, human-readable ids. */
-export function makeId(prefix, text = "") {
+export function makeId(prefix: string, text: string | null | undefined = ""): string {
   const slug = slugify(text);
   return slug ? `${prefix}-${slug}-${shortCode()}` : `${prefix}-${shortCode()}`;
 }

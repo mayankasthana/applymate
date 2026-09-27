@@ -3,12 +3,10 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { appendFile } from "node:fs/promises";
 
-import { ChatLog } from "../src/services/inbox.js";
-import { withTmpDir } from "./helpers.js";
+import { ChatLog } from "../src/services/inbox.ts";
+import { withTmpDir } from "./helpers.ts";
 
-function makeLog(root) {
-  return new ChatLog({ filePath: join(root, "chat", "log.jsonl") });
-}
+const makeLog = (root: string) => new ChatLog({ filePath: join(root, "chat", "log.jsonl") });
 
 test("append assigns sequential ids and persists to disk", async () => {
   await withTmpDir(async (root) => {
@@ -20,7 +18,7 @@ test("append assigns sequential ids and persists to disk", async () => {
     const reloaded = new ChatLog({ filePath: join(root, "chat", "log.jsonl") });
     const all = await reloaded.list();
     assert.equal(all.length, 2);
-    assert.equal(all[1].text, "hello captain");
+    assert.equal(all[1]!.text, "hello captain");
   });
 });
 
@@ -29,14 +27,14 @@ test("append records timestamps and optional meta", async () => {
     const log = makeLog(root);
     const m = await log.append({ from: "user", text: "look at app-x", meta: { appId: "app-x" } });
     assert.ok(m.at);
-    assert.equal(m.meta.appId, "app-x");
+    assert.equal((m.meta as { appId: string }).appId, "app-x");
   });
 });
 
 test("append validates sender and text", async () => {
   await withTmpDir(async (root) => {
     const log = makeLog(root);
-    await assert.rejects(() => log.append({ from: "ghost", text: "boo" }), /from/i);
+    await assert.rejects(() => log.append({ from: "ghost" as never, text: "boo" }), /from/i);
     await assert.rejects(() => log.append({ from: "user", text: "   " }), /text/i);
   });
 });
@@ -61,17 +59,15 @@ test("a torn trailing write is tolerated on load", async () => {
     const reloaded = new ChatLog({ filePath: path });
     const all = await reloaded.list();
     assert.equal(all.length, 1);
-    // and appending continues from the last good id
     const next = await reloaded.append({ from: "agent", text: "recovered" });
-    assert.equal(next.id, 2);
+    assert.equal(next.id, 2); // appends continue from the last good id
   });
 });
 
 test("poll with waitMs=0 returns immediately (messages or empty)", async () => {
   await withTmpDir(async (root) => {
     const log = makeLog(root);
-    const empty = await log.poll({ since: 0, waitMs: 0 });
-    assert.deepEqual(empty, []);
+    assert.deepEqual(await log.poll({ since: 0, waitMs: 0 }), []);
     await log.append({ from: "user", text: "now" });
     const msgs = await log.poll({ since: 0, waitMs: 0 });
     assert.equal(msgs.length, 1);
@@ -81,19 +77,18 @@ test("poll with waitMs=0 returns immediately (messages or empty)", async () => {
 test("poll waits for a user message that arrives while waiting", async () => {
   await withTmpDir(async (root) => {
     const log = makeLog(root);
-    setTimeout(() => log.append({ from: "user", text: "late message" }), 250);
+    setTimeout(() => void log.append({ from: "user", text: "late message" }), 250);
     const msgs = await log.poll({ since: 0, waitMs: 5000 });
     assert.equal(msgs.length, 1);
-    assert.equal(msgs[0].text, "late message");
+    assert.equal(msgs[0]!.text, "late message");
   });
 });
 
 test("poll ignores agent messages when waiting for the captain", async () => {
   await withTmpDir(async (root) => {
     const log = makeLog(root);
-    setTimeout(() => log.append({ from: "agent", text: "self talk" }), 100);
-    const msgs = await log.poll({ since: 0, waitMs: 400 });
-    assert.deepEqual(msgs, []);
+    setTimeout(() => void log.append({ from: "agent", text: "self talk" }), 100);
+    assert.deepEqual(await log.poll({ since: 0, waitMs: 400 }), []);
   });
 });
 
@@ -101,8 +96,7 @@ test("poll times out quietly with an empty list", async () => {
   await withTmpDir(async (root) => {
     const log = makeLog(root);
     const start = Date.now();
-    const msgs = await log.poll({ since: 0, waitMs: 300 });
-    assert.deepEqual(msgs, []);
+    assert.deepEqual(await log.poll({ since: 0, waitMs: 300 }), []);
     assert.ok(Date.now() - start >= 250, "should have waited ~300ms");
   });
 });

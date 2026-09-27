@@ -10,14 +10,16 @@
     "url": "git+https://github.com/mayankasthana/applyjobagent.git"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "bin": {
-    "axa": "bin/axa.mjs"
+    "axa": "bin/axa.ts"
   },
   "scripts": {
-    "test": "node --test test/",
-    "test:watch": "node --test --watch test/"
+    "test": "node --test --test-force-exit test/*.test.ts",
+    "test:watch": "node --test --watch --test-force-exit test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "axa": "node bin/axa.ts"
   },
   "keywords": [
     "agent",
@@ -26,5 +28,9 @@
     "resume",
     "agents-md",
     "cli"
-  ]
+  ],
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2"
+  }
 }
