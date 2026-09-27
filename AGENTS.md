@@ -68,11 +68,16 @@ Every command accepts `--json` for machine-readable output.
 1. Read the candidate's filters: `node bin/axa.ts prefs list`. If `companyType`,
    `salaryFloor`, `workMode`, `locations`, or `seniority` are unset, ask first
    (boot sequence rule).
-2. For each posting: `job add` → `job match <jobId>`. The match score
+2. **Discover in the browser when the harness has one.** Search job boards and
+   company career pages with the browser tools (official search boxes and
+   filters — not bulk scraping), read the listings, and capture each promising
+   JD's full text. Without browser tools, work from postings the candidate
+   supplies.
+3. For each posting: `job add` → `job match <jobId>`. The match score
    compares the JD against the dossier index; the toolbelt refuses to open
    applications below `config minMatchScore` (default 60) — respect that; it is
    the candidate's stated relevance bar.
-3. Present a shortlist in chat: company, role, score, grade, 1-line "why", and
+4. Present a shortlist in chat: company, role, score, grade, 1-line "why", and
    missing-skill red flags. Let the candidate pick. Only then `app start`.
 
 ### Tailor an application ("apply for this job")
@@ -95,9 +100,10 @@ Every command accepts `--json` for machine-readable output.
 
 ### Apply in the browser (forms, portals, Next buttons)
 
-Use the harness's browser/computer-use tools when available (ZCode browser use,
-Claude computer use, Antigravity browser, ...). If the harness has no browser
-tools, prepare the answers and ask the candidate to drive.
+The browser is the default way to apply. Use the harness's browser/computer-use
+tools whenever they exist (ZCode browser use, Claude computer use, Antigravity
+browser, ...); fall back to preparing answers for the candidate to enter by
+hand only when the harness has no browser tools at all.
 
 1. Read the candidate's form memory first: `node bin/axa.ts answers list`, and
    `answers get "<question>"` per field. Fill what you know; **never guess
@@ -105,11 +111,35 @@ tools, prepare the answers and ask the candidate to drive.
 2. For unknown questions, ask the candidate in chat, wait for the answer, apply
    it, and **persist it**: `node bin/axa.ts answers set "<question>" "<answer>"`.
    Normalizing capitalization is fine; changing meaning is not.
-3. Click through multi-page flows (Next / Save & Continue). Save progress notes
-   to the application's `notes.md` artifact (portal quirks, where you stopped).
+3. Click through multi-page flows (Next / Save & Continue) following the
+   human-pacing rules below. Save progress notes to the application's
+   `notes.md` artifact (portal quirks, where you stopped).
 4. **The final Submit is the candidate's button.** Stage everything, then ask:
    "Ready to submit?" Proceed only on an explicit yes in this session.
 5. After submitting: `app move <id> submitted --note "<portal, date>"`.
+
+### Act like a careful human in the browser
+
+You are doing what the candidate could do themselves, at the pace a person
+would. This keeps their accounts in good standing and the automation reliable —
+rushed, robotic bursts are what get real people's accounts flagged.
+
+- **One session, one tab per site, unhurried.** Never run parallel sessions on
+  the same portal, never batch-blast applications, and keep volume within what
+  a person could honestly do in a sitting.
+- **Read before you act.** Let pages load, scan them, move through forms in
+  order with natural pauses between pages instead of machine-gun clicks.
+- **Type like a person.** Enter text field by field with small pauses and the
+  occasional correction — real keystroke rhythm, not instant field-stuffing.
+- **Respect what the site tells you.** If a CAPTCHA, human-verification
+  challenge, or block page appears, stop and hand it to the candidate. Never
+  attempt to bypass, solve, or disguise your way around one.
+- **No evasion tooling, ever.** No fingerprint spoofing, no stealth/anti-detect
+  plugins, no user-agent or header trickery, no proxy rotation to slip past
+  blocks, no defeating anti-bot systems. If a site rejects automation, the
+  answer is to hand that site to the candidate — not to hide better.
+- If asked for any of the above anyway, decline and explain why; the
+  candidate's accounts and standing matter more than any single application.
 
 ### The chat loop
 

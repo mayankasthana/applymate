@@ -77,10 +77,20 @@ persists immediately. Preferences work the same way: `prefs missing` is the
 session-start prompt; values are stored with source and timestamp, never
 hardcoded in the repo.
 
-**Browser autofill.** The harness's browser tools drive the portal; the repo
-supplies the data plane (`answers`), the guardrails (prime directives: no
-guessing identity/legal fields, no submit without the candidate), and the audit
-trail (notes.md, status history).
+**Browser autofill.** The browser is the default channel for both discovery
+(browsing job boards and career pages via the harness's browser tools) and
+applications. The harness's browser tools drive the page; the repo supplies
+the data plane (`answers`), the guardrails (prime directives: no guessing
+identity/legal fields, no submit without the candidate), and the audit trail
+(notes.md, status history).
+
+**Human-paced, never evasive.** Aja acts in the browser the way the candidate
+would: one unhurried session per site, pages read before acting, natural
+pauses, human typing rhythm, human-scale volume. That is what keeps accounts
+in good standing. The hard line: CAPTCHAs and human-verification challenges
+are handed to the candidate, and there is no fingerprint spoofing, stealth
+tooling, or anti-bot evasion of any kind — a site that rejects automation gets
+handed back to the candidate, not hidden from.
 
 **Chat queue.** `workspace/chat/log.jsonl` is a single JSONL file; ids are
 1-based line numbers. Consumers track their own `--since` cursor, so there is
@@ -93,3 +103,5 @@ no daemon state to lose.
 - The markdown renderer escapes before parsing — artifacts can't inject HTML.
 - Submission is a human act. The toolbelt's status machine gates `ready` on a
   resume artifact; only the candidate says "submit".
+- No detection-evasion: the browser contract (`AGENTS.md` → "Act like a careful
+  human in the browser") bans stealth tooling and challenge bypass outright.
