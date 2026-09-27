@@ -3,15 +3,23 @@ import { readFile } from "node:fs/promises";
 import { join, resolve, sep, extname } from "node:path";
 
 import type { Config } from "./config.ts";
-import { ensureWorkspace, makeServices, workspacePaths, type Services } from "./workspace.ts";
+import { makeServices, type Services } from "./workspace.ts";
 import { UI_HTML } from "./server-ui.ts";
-import { renderDocument } from "./services/markdown.ts";
+import { renderDocument, escapeHtml } from "./services/markdown.ts";
 import { loadDossierIndex } from "./services/dossier.ts";
 import { scoreMatch } from "./services/matcher.ts";
-import { writeJsonAtomic } from "./fsutil.ts";
 
 const MAX_BODY_BYTES = 1_000_000;
 const RENDERABLE = /\.(md|markdown|txt)$/i;
+/** Served as-is with a proper content-type: evidence screenshots and PDFs. */
+const BINARY_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".pdf": "application/pdf",
+};
 
 /**
  * The local chat/review UI (lavish-axi style): a single-page app served on
@@ -114,16 +122,23 @@ async function serveArtifact(res: ServerResponse, services: Services, rel: strin
   if (!rel || !target.startsWith(root + sep)) {
     return sendJson(res, 403, { error: "path escapes workspace" });
   }
-  let content: string;
+  let content: Buffer;
   try {
-    content = await readFile(target, "utf8");
+    content = await readFile(target);
   } catch {
     return sendJson(res, 404, { error: `no such artifact: ${rel}` });
   }
-  if (RENDERABLE.test(extname(target)) || RENDERABLE.test(target)) {
-    return sendHtml(res, 200, renderDocument(content, { title: rel }));
+  const mime = BINARY_TYPES[extname(target).toLowerCase()];
+  if (mime) {
+    res.writeHead(200, { "content-type": mime });
+    res.end(content);
+    return;
   }
-  return sendHtml(res, 200, `<pre>${content.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</pre>`);
+  const text = content.toString("utf8");
+  if (RENDERABLE.test(extname(target)) || RENDERABLE.test(target)) {
+    return sendHtml(res, 200, renderDocument(text, { title: rel }));
+  }
+  return sendHtml(res, 200, `<pre>${escapeHtml(text)}</pre>`);
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {

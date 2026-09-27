@@ -130,14 +130,21 @@ async function openApp(id){
   const job = app.job || {};
   const arts = Object.entries(app.artifacts || {}).filter(([,p]) => p)
     .map(([k,p]) => '<a class="artifact btn" target="_blank" href="/api/artifact?path=' + encodeURIComponent(p) + '">open ' + esc(k) + '</a>').join("");
+  const evidence = (app.evidence||[]).map((e) =>
+    '<a class="artifact btn" style="background:#dd6b20" target="_blank" href="/api/artifact?path=' + encodeURIComponent(e.path) + '" title="' + esc(e.at) + '">' + esc(e.kind) + '</a>'
+  ).join("");
   $("#sheetBody").innerHTML =
     '<h3>' + esc(job.company||"?") + ' — ' + esc(job.title||"?") + '</h3>' +
     '<dl class="meta">' +
     '<dt>status</dt><dd>' + esc(app.status) + '</dd>' +
     '<dt>match</dt><dd>' + (app.matchScore ?? "not scored") + '</dd>' +
     '<dt>resume source</dt><dd>' + esc(app.resumeRef || "-") + '</dd>' +
-    (job.matchScore === null && job.matchScore !== undefined ? '<dt>job match</dt><dd><button class="btn" onclick="rescore(\\'' + esc(job.id) + '\\')">score now</button></dd>' : '') +
-    '</dl>' + (arts || '<p class="empty">no artifacts yet</p>') +
+    '<dt>submitted</dt><dd>' + (app.submittedAt
+      ? esc(app.submittedAt) + (app.submissionPortal ? ' via ' + esc(app.submissionPortal) : '') + (app.submissionConfirmation ? ' · conf ' + esc(app.submissionConfirmation) : '')
+      : 'not yet') + '</dd>' +
+    '</dl>' +
+    (evidence ? '<h4>Evidence</h4>' + evidence : '') +
+    (arts ? '<h4>Artifacts</h4>' + arts : '<p class="empty">no artifacts yet</p>') +
     '<h4>Job description</h4><pre style="white-space:pre-wrap">' + esc(job.description||"") + '</pre>';
   $("#overlay").classList.add("open");
 }

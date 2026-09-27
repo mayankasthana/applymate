@@ -28,6 +28,20 @@ export interface Job {
   matchScore: number | null;
   matchReportPath: string | null;
   matchedAt: string | null;
+  /** Captures proving what the posting said (screenshots, page snapshots). */
+  evidence: Evidence[];
+}
+
+/** A stored capture (screenshot, snapshot, confirmation) tied to a record.
+ *  `path` is workspace-relative; `at` is when the capture was taken/stored. */
+export interface Evidence {
+  id: string;
+  /** Convention: jd-screenshot, jd-snapshot, submit-screenshot, confirmation, other-<x> */
+  kind: string;
+  path: string;
+  at: string;
+  url?: string | null;
+  note?: string | null;
 }
 
 export interface JobInput {
@@ -54,6 +68,7 @@ export class Job {
       matchScore: null,
       matchReportPath: null,
       matchedAt: null,
+      evidence: [],
     };
     Job.validate(job, { requireId: false });
     if (job.url !== null && !/^https?:\/\/\S+$/.test(job.url)) {
@@ -73,6 +88,7 @@ export class Job {
     job.matchScore = typeof job.matchScore === "number" ? job.matchScore : null;
     job.matchReportPath = strOr(job.matchReportPath, null);
     job.matchedAt = strOr(job.matchedAt, null);
+    job.evidence = Array.isArray(job.evidence) ? job.evidence : [];
     return job;
   }
 }
@@ -152,6 +168,12 @@ export interface Application {
   matchReportPath: string | null;
   artifacts: ApplicationArtifacts;
   history: HistoryEntry[];
+  /** Exactly when the application was submitted (set via `app submitted`). */
+  submittedAt: string | null;
+  submissionPortal: string | null;
+  submissionConfirmation: string | null;
+  /** Captures proving the submission: screenshots, confirmations. */
+  evidence: Evidence[];
   createdAt: string;
   updatedAt: string;
 }
@@ -175,6 +197,10 @@ export class Application {
       matchReportPath: null,
       artifacts: { resume: null, coverLetter: null, notes: null },
       history: [],
+      submittedAt: null,
+      submissionPortal: null,
+      submissionConfirmation: null,
+      evidence: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -187,6 +213,10 @@ export class Application {
     if (!isStatus(app.status)) {
       throw new DomainError(`application has unknown status: ${String(app.status)}`);
     }
+    app.submittedAt = strOr(app.submittedAt, null);
+    app.submissionPortal = strOr(app.submissionPortal, null);
+    app.submissionConfirmation = strOr(app.submissionConfirmation, null);
+    app.evidence = Array.isArray(app.evidence) ? app.evidence : [];
     return app;
   }
 

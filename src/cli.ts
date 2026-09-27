@@ -9,7 +9,7 @@ import { scoreMatch, type MatchReport } from "./services/matcher.ts";
 import { renderDocument } from "./services/markdown.ts";
 import { writeJsonAtomic } from "./fsutil.ts";
 import { type PrefValue } from "./services/profile.ts";
-import { type Job } from "./domain.ts";
+import { type Job, type Evidence } from "./domain.ts";
 
 interface Io {
   stdout: { write(s: string): unknown };
@@ -208,6 +208,7 @@ async function cmdJobShow({ pos, flags, io, rootDir }: CommandContext): Promise<
   line(io, `${job.company} — ${job.title}${job.location ? ` (${job.location})` : ""}`);
   if (job.url) line(io, job.url);
   line(io, `match: ${job.matchScore !== null ? `${job.matchScore}/100` : "not scored"}`);
+  for (const e of job.evidence) line(io, `evidence [${e.kind}] ${e.path}${e.url ? ` (from ${e.url})` : ""} at ${e.at}`);
   line(io);
   line(io, job.description);
   return 0;
@@ -221,6 +222,22 @@ async function cmdJobMatch({ pos, flags, io, rootDir }: CommandContext): Promise
   if (flags.json) return jsonOut(io, { jobId: id, ...report, reportPath });
   line(io, renderMatchText(report));
   line(io, `report: ${reportPath}`);
+  return 0;
+}
+
+async function cmdJobEvidence({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const [id, file] = pos;
+  if (!id || !file) return failWith(io, "job evidence <jobId> <file> --kind jd-screenshot [--url u] [--note n] [--at iso]", "need <jobId> and <file>");
+  if (!flags.kind) return failWith(io, "job evidence <jobId> <file> --kind jd-screenshot", "--kind is required (jd-screenshot, jd-snapshot, ...)");
+  const svc = await services(rootDir);
+  const entry = await svc.evidence.captureJob(id, file, {
+    kind: String(flags.kind),
+    url: flags.url ? String(flags.url) : null,
+    note: flags.note ? String(flags.note) : null,
+    at: flags.at ? String(flags.at) : undefined,
+  });
+  if (flags.json) return jsonOut(io, entry);
+  line(io, `stored ${entry.kind} -> ${entry.path} (at ${entry.at})`);
   return 0;
 }
 
@@ -259,7 +276,11 @@ async function cmdAppShow({ pos, flags, io, rootDir }: CommandContext): Promise<
   if (job) line(io, `${job.company} — ${job.title}`);
   line(io, `resume from dossier: ${app.resumeRef ?? "(none chosen)"}`);
   line(io, `match: ${app.matchScore !== null ? `${app.matchScore}/100` : "not scored"}${app.matchReportPath ? ` (${app.matchReportPath})` : ""}`);
+  if (app.submittedAt) {
+    line(io, `submitted: ${app.submittedAt}${app.submissionPortal ? ` via ${app.submissionPortal}` : ""}${app.submissionConfirmation ? ` (confirmation ${app.submissionConfirmation})` : ""}`);
+  }
   for (const [kind, p] of Object.entries(app.artifacts)) line(io, `artifact ${kind}: ${p ?? "-"}`);
+  for (const e of app.evidence) line(io, `evidence [${e.kind}] ${e.path} at ${e.at}`);
   for (const h of app.history) line(io, `history: ${h.from} -> ${h.to}${h.note ? ` (${h.note})` : ""} at ${h.at}`);
   line(io);
   if (job) line(io, job.description);
@@ -297,6 +318,37 @@ async function cmdAppMatch({ pos, flags, io, rootDir }: CommandContext): Promise
   if (flags.json) return jsonOut(io, { appId: id, ...report, reportPath, reportMarkdown: reportMarkdownPath });
   line(io, renderMatchText(report));
   line(io, `report: ${reportPath} + ${reportMarkdownPath}`);
+  return 0;
+}
+
+async function cmdAppEvidence({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const [id, file] = pos;
+  if (!id || !file) return failWith(io, "app evidence <appId> <file> --kind submit-screenshot [--note n] [--at iso]", "need <appId> and <file>");
+  if (!flags.kind) return failWith(io, "app evidence <appId> <file> --kind submit-screenshot", "--kind is required (submit-screenshot, confirmation, ...)");
+  const svc = await services(rootDir);
+  const entry = await svc.evidence.captureApplication(id, file, {
+    kind: String(flags.kind),
+    note: flags.note ? String(flags.note) : null,
+    at: flags.at ? String(flags.at) : undefined,
+  });
+  if (flags.json) return jsonOut(io, entry);
+  line(io, `stored ${entry.kind} -> ${entry.path} (at ${entry.at})`);
+  return 0;
+}
+
+async function cmdAppSubmitted({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const [id] = pos;
+  if (!id) return failWith(io, "app submitted <appId> [--portal p] [--confirmation c] [--at iso] [--note n]", "missing application id");
+  const svc = await services(rootDir);
+  const app = await svc.pipeline.markSubmitted(id, {
+    at: flags.at ? String(flags.at) : new Date().toISOString(),
+    portal: flags.portal ? String(flags.portal) : null,
+    confirmation: flags.confirmation ? String(flags.confirmation) : null,
+    note: flags.note ? String(flags.note) : null,
+  });
+  if (flags.json) return jsonOut(io, app);
+  line(io, `${app.id}: submitted at ${app.submittedAt}${app.submissionPortal ? ` via ${app.submissionPortal}` : ""}${app.submissionConfirmation ? ` (confirmation ${app.submissionConfirmation})` : ""}`);
+  line(io, `evidence tip: node bin/axa.ts app evidence ${id} submit.png --kind submit-screenshot`);
   return 0;
 }
 
@@ -533,13 +585,16 @@ function printHelp(io: Io, code = 0): number {
       "  answers list                      dump all stored answers",
       "",
       "pipeline:",
-      "  job add --company C --title T [--file jd.md | --desc text]",
+      "  job add --company C --title T [--url U] [--file jd.md | --desc text]",
+      "  job evidence <jobId> <file> --kind jd-screenshot [--url U]",
       "  job list | job show <id>",
       "  job match <jobId>               score JD vs dossier (relevance gate)",
       "  app start <jobId> [--resume p] [--force]",
       "  app list [--status s] | app show <id>",
       "  app move <id> <status> [--note n]",
       "  app artifact <id> <kind> <path>",
+      "  app evidence <appId> <file> --kind submit-screenshot",
+      "  app submitted <appId> [--portal p] [--confirmation c]",
       "  app match <appId>               score + attach report to application",
       "  pipeline                        kanban view of all applications",
       "",
@@ -575,12 +630,15 @@ const COMMANDS: Command[] = [
   { name: "job add", summary: "add a job posting", run: cmdJobAdd },
   { name: "job list", summary: "list jobs", run: cmdJobList },
   { name: "job show", summary: "show a job", run: cmdJobShow },
+  { name: "job evidence", summary: "attach a capture (screenshot/snapshot)", run: cmdJobEvidence },
   { name: "job match", summary: "score job vs dossier", run: cmdJobMatch },
   { name: "app start", summary: "open an application", run: cmdAppStart },
   { name: "app list", summary: "list applications", run: cmdAppList },
   { name: "app show", summary: "show an application", run: cmdAppShow },
   { name: "app move", summary: "move status", run: cmdAppMove },
   { name: "app artifact", summary: "attach artifact", run: cmdAppArtifact },
+  { name: "app evidence", summary: "attach a capture (screenshot/confirmation)", run: cmdAppEvidence },
+  { name: "app submitted", summary: "record submission time/portal/confirmation", run: cmdAppSubmitted },
   { name: "app match", summary: "score + attach report", run: cmdAppMatch },
   { name: "pipeline", summary: "kanban view", run: cmdPipeline },
   { name: "chat send", summary: "user message", run: cmdChatSend },

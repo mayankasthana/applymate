@@ -187,6 +187,71 @@ test("chat send/poll/reply/log loop", async () => {
   });
 });
 
+test("evidence trail: job evidence before, submit evidence + timestamp after", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const shot = join(root, "posting.png");
+    await writeFile(shot, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+
+    const add = await run(
+      ["job", "add", "--company", "Vercel", "--title", "Platform Engineer", "--desc", "Kafka Go", "--url", "https://vercel.com/careers/123"],
+      root
+    );
+    const jobId = add.stdout.match(/job-[a-z0-9-]+/)![0]!;
+
+    const ev = await run(
+      ["job", "evidence", jobId!, shot, "--kind", "jd-screenshot", "--url", "https://vercel.com/careers/123", "--at", "2026-09-27T09:00:00.000Z"],
+      root
+    );
+    assert.equal(ev.code, 0);
+    const show = await run(["job", "show", jobId!], root);
+    assert.match(show.stdout, /evidence \[jd-screenshot\] jobs\//);
+    assert.match(show.stdout, /vercel\.com\/careers\/123/);
+
+    // open the application and walk it to ready
+    const start = await run(["app", "start", jobId!], root);
+    const appId = start.stdout.match(/app-[a-z0-9]+/)?.[0];
+    assert.ok(appId);
+    await run(["app", "move", appId!, "matched"], root);
+    await run(["app", "move", appId!, "tailoring"], root);
+    await run(["app", "artifact", appId!, "resume", `applications/${appId}/resume.md`], root);
+    await run(["app", "move", appId!, "ready"], root);
+
+    // from ready, `app submitted` records time, portal and confirmation
+    const submitted = await run(
+      ["app", "submitted", appId!, "--portal", "Greenhouse", "--confirmation", "GH-777", "--at", "2026-09-27T18:42:00.000Z"],
+      root
+    );
+    assert.equal(submitted.code, 0);
+    assert.match(submitted.stdout, /2026-09-27T18:42:00\.000Z/);
+    assert.match(submitted.stdout, /Greenhouse/);
+    assert.match(submitted.stdout, /GH-777/);
+
+    // submit-page screenshot
+    const submitShot = join(root, "submit.png");
+    await writeFile(submitShot, shot);
+    const ev2 = await run(["app", "evidence", appId!, submitShot, "--kind", "submit-screenshot"], root);
+    assert.equal(ev2.code, 0);
+
+    const appShow = await run(["app", "show", appId!], root);
+    assert.match(appShow.stdout, /submitted: 2026-09-27T18:42:00\.000Z via Greenhouse \(confirmation GH-777\)/);
+    assert.match(appShow.stdout, /evidence \[submit-screenshot\]/);
+  });
+});
+
+test("app submitted from an early status is refused (status machine)", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const add = await run(["job", "add", "--company", "A", "--title", "B", "--desc", "C"], root);
+    const jobId = add.stdout.match(/job-[a-z0-9-]+/)![0]!;
+    const start = await run(["app", "start", jobId!], root);
+    const appId = start.stdout.match(/app-[a-z0-9]+/)?.[0];
+    const res = await run(["app", "submitted", appId!], root);
+    assert.equal(res.code, 1);
+    assert.match(res.stderr, /illegal status transition/);
+  });
+});
+
 test("render writes a standalone html file (single-word command + args)", async () => {
   await withTmpDir(async (root) => {
     await run(["init"], root);

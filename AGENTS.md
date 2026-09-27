@@ -78,11 +78,18 @@ Every command accepts `--json` for machine-readable output.
    filters — not bulk scraping), read the listings, and capture each promising
    JD's full text. Without browser tools, work from postings the candidate
    supplies.
-3. For each posting: `job add` → `job match <jobId>`. The match score
+3. **Capture the evidence before moving on** (postings disappear): screenshot
+   the posting page and store it —
+   `node bin/axa.ts job evidence <jobId> shot.png --kind jd-screenshot --url <posting url>`
+   (screenshots are PNG/JPEG/PDF/HTML; the toolbelt timestamps and files them
+   under `workspace/jobs/<jobId>/evidence/`). For tricky pages also save the
+   page (print-to-PDF / save-HTML) with `--kind jd-snapshot`. The JD text,
+   posting URL, and capture date are stored on the job record by `job add`.
+4. For each posting: `job add` → `job match <jobId>`. The match score
    compares the JD against the dossier index; the toolbelt refuses to open
    applications below `config minMatchScore` (default 60) — respect that; it is
    the candidate's stated relevance bar.
-4. Present a shortlist in chat: company, role, score, grade, 1-line "why", and
+5. Present a shortlist in chat: company, role, score, grade, 1-line "why", and
    missing-skill red flags. Let the candidate pick. Only then `app start`.
 
 ### Tailor an application ("apply for this job")
@@ -121,7 +128,14 @@ hand only when the harness has no browser tools at all.
    `notes.md` artifact (portal quirks, where you stopped).
 4. **The final Submit is the candidate's button.** Stage everything, then ask:
    "Ready to submit?" Proceed only on an explicit yes in this session.
-5. After submitting: `app move <id> submitted --note "<portal, date>"`.
+5. **The moment it is submitted, preserve the proof:** screenshot the
+   confirmation/submit page and store it —
+   `node bin/axa.ts app evidence <appId> submit.png --kind submit-screenshot`
+   — then record the facts: `node bin/axa.ts app submitted <appId> --portal
+   "<portal>" --confirmation "<number if shown>"`. The toolbelt stamps the
+   exact submission time (ISO) and files the screenshot under
+   `workspace/applications/<appId>/evidence/`. Then
+   `app move <id> submitted` happens automatically via `app submitted`.
 
 ### Act like a careful human in the browser
 
@@ -184,6 +198,15 @@ axa.config.json      settings incl. dossierDir, minMatchScore      (NEVER commit
 `workspace/profile/answers.json` — the form-answer memory.
 `workspace/dossier/index.json` — the indexed dossier. If the candidate's stories
 and facts belong anywhere, it is the dossier (or `answers`), never a hardcode.
+
+**Evidence trail (never skip it).** Before applying, every job carries the JD
+text, the posting URL, the capture date, and at minimum a `jd-screenshot`
+(`job evidence`). After submitting, every application carries a
+`submit-screenshot` of the confirmation page and the exact submission time,
+portal, and confirmation number (`app evidence` + `app submitted`). Files are
+auto-stamped and filed under `workspace/jobs/<id>/evidence/` and
+`workspace/applications/<id>/evidence/`; reviewable in the UI on each
+application card.
 
 ## Working on this repo itself
 

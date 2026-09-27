@@ -130,6 +130,21 @@ test("artifact endpoint renders workspace markdown and blocks path escape", asyn
   });
 });
 
+test("artifact endpoint serves evidence screenshots with an image content-type", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const dir = join(services.paths.applications, "app-x", "evidence");
+    await mkdir(dir, { recursive: true });
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await writeFile(join(dir, "submit-screenshot.png"), png);
+
+    const res = await fetch(base + "/api/artifact?path=" + encodeURIComponent("applications/app-x/evidence/submit-screenshot.png"));
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /^image\/png/);
+    assert.deepEqual(Buffer.from(await res.arrayBuffer()), png);
+  });
+});
+
 test("unknown api routes 404", async () => {
   await withServer(async ({ base }) => {
     const res = await fetch(base + "/api/nope");

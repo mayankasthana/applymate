@@ -49,15 +49,24 @@ Recommended keys (suggestions only, values always yours):
 
 | command | what it does |
 |---|---|
-| `job add --company C --title T [--file jd.md \| --desc text] [--url U] [--location L]` | Track a posting |
-| `job list` / `job show <id>` | List / inspect |
+| `job add --company C --title T [--url U] [--file jd.md \| --desc text] [--location L]` | Track a posting (JD text, URL and capture date stored on the record) |
+| `job evidence <jobId> <file> --kind jd-screenshot [--url U] [--note n] [--at iso]` | Copy a capture into `workspace/jobs/<id>/evidence/` and record it (png/jpg/webp/gif/pdf/html/txt/md) |
+| `job list` / `job show <id>` | List / inspect (show prints the evidence list) |
 | `job match <jobId>` | Score the JD against the dossier; persists score + writes `workspace/jobs/<id>/match.{json,md}` |
 | `app start <jobId> [--resume path] [--force]` | Open an application. Relevance gate: refuses below `minMatchScore` unless `--force` |
-| `app list [--status s]` / `app show <id>` | List / inspect with history |
+| `app list [--status s]` / `app show <id>` | List / inspect with history, submission details and evidence |
 | `app move <id> <status> [--note n]` | Walk the status machine (illegal skips rejected) |
 | `app artifact <id> <resume\|coverLetter\|notes> <path>` | Register a workspace-relative artifact |
+| `app evidence <appId> <file> --kind submit-screenshot [--note n] [--at iso]` | Store submit-page screenshots and confirmations |
+| `app submitted <appId> [--portal p] [--confirmation c] [--at iso]` | Stamp exact submission time + portal + confirmation; walks the machine to `submitted` |
 | `app match <appId>` | Score + attach report to the application |
 | `pipeline` | Kanban view across all statuses |
+
+**Evidence kinds** are slugs; conventions: `jd-screenshot`, `jd-snapshot`
+(saved page/PDF) on jobs; `submit-screenshot`, `confirmation` on applications.
+Every entry records its kind, ISO timestamp, source URL (jobs), and note.
+`app submitted` refuses illegal status jumps — `discovered → submitted` is not
+a thing; walk the machine first.
 
 Status machine: `discovered → matched → tailoring → ready → submitted →
 interviewing → offer`; `closed` from any non-terminal; `rejected` from

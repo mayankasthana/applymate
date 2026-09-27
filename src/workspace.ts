@@ -6,6 +6,7 @@ import { JsonCollection } from "./adapters/json-collection.ts";
 import { PipelineService } from "./services/pipeline.ts";
 import { ChatLog } from "./services/inbox.ts";
 import { ProfileStore } from "./services/profile.ts";
+import { EvidenceStore } from "./services/evidence.ts";
 import { Application, Job } from "./domain.ts";
 
 /**
@@ -52,6 +53,7 @@ export function makeServices(config: Config) {
     pipeline: new PipelineService({ jobs, applications, minMatchScore: config.minMatchScore }),
     chat: new ChatLog({ filePath: paths.chatLog }),
     profile: new ProfileStore({ dir: paths.profile }),
+    evidence: new EvidenceStore({ jobs, applications, workspaceRoot: paths.root }),
   };
 }
 
