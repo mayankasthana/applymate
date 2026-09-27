@@ -100,7 +100,7 @@ test("state endpoint exposes pipeline, prefs and missing preferences", async () 
     await fetch(base + "/api/prefs", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key: "candidateName", value: "Mayank" }),
+      body: JSON.stringify({ key: "candidateName", value: "Priya" }),
     });
     const state = (await (await fetch(base + "/api/state")).json()) as {
       pipeline: Record<string, unknown[]>;
@@ -116,7 +116,7 @@ test("state endpoint exposes pipeline, prefs and missing preferences", async () 
     // the candidate's name roundtrips under its normalized key (UI greets by it)
     assert.ok(!state.missingPreferences.includes("candidateName"));
     const storedName = state.preferences.find((p) => p.key === "candidatename");
-    assert.equal(storedName!.value, "Mayank");
+    assert.equal(storedName!.value, "Priya");
   });
 });
 

@@ -89,7 +89,7 @@ test("answers: re-recording a question updates the answer in place", async () =>
 test("answers: list returns everything for the browser-apply protocol", async () => {
   await withTmpDir(async (root) => {
     const p = makeProfile(root);
-    await p.recordAnswer("First name", "Mayank");
+    await p.recordAnswer("First name", "Priya");
     await p.recordAnswer("Years of experience", "12");
     const all = await p.answers();
     assert.equal(all.length, 2);

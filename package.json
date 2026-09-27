@@ -4,6 +4,7 @@
   "description": "Applymate — harness-agnostic job-application agent distro: a dossier-driven pipeline + local chat/review UI, operated by any AI CLI harness (Claude Code, Codex, Cursor, ZCode, Gemini CLI, ...).",
   "type": "module",
   "license": "MIT",
+  "private": true,
   "author": "Mayank Asthana",
   "repository": {
     "type": "git",

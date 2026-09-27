@@ -13,7 +13,7 @@ async function writeDossier(root: string): Promise<string> {
   await writeFile(
     join(dir, "master-resume.md"),
     [
-      "# Mayank Asthana — Master Resume",
+      "# Priya Sharma — Master Resume",
       "",
       "## Summary",
       "Staff engineer. Kafka, Kubernetes, Go, distributed systems.",
@@ -67,7 +67,7 @@ test("indexDossier captures the H1 title and markdown section headings", async (
     const dir = await writeDossier(root);
     const index = await new DossierIndexer(dir).index();
     const master = index.files.find((f) => f.path === "master-resume.md")!;
-    assert.equal(master.title, "Mayank Asthana — Master Resume");
+    assert.equal(master.title, "Priya Sharma — Master Resume");
     assert.deepEqual(master.sections, ["Summary", "Experience"]);
   });
 });
