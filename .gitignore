@@ -11,7 +11,13 @@ applymate.config.json
 .idea/
 .vscode/
 
+# Browser rig runtime artifacts (patched clone, venv, model weights)
+browser-rig/jev-ultrafast/
+browser-rig/.venv/
+browser-rig/models/
+
 # Node
 node_modules/
 npm-debug.log*
 *.tsbuildinfo
+browser-rig/results/
