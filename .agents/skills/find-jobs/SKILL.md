@@ -9,8 +9,11 @@ description: Find job postings relevant to the candidate's dossier and preferenc
    `salaryFloor`, `workMode`, `locations`, or `seniority` are missing, ask
    before searching. Respect them strictly — e.g. skip service-based shops when
    the candidate prefers product-based companies.
-2. Gather promising postings (text/URLs you are given, or the harness's web
-   search/browsing tools). For each: `node bin/axa.ts job add --company ... --title ... --file jd.md`.
+2. **Discover in the browser when the harness has one.** Search job boards and
+   company career pages with the browser tools: official search boxes and
+   filters, unhurried, page by page — never bulk scraping or parallel crawls.
+   Capture each promising JD's full text. Without browser tools, work from
+   postings you are given. For each: `node bin/axa.ts job add --company ... --title ... --file jd.md`.
 3. Score every posting: `node bin/axa.ts job match <jobId>`. The toolbelt
    refuses applications below `config minMatchScore`; report the gate, do not
    route around it.
