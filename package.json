@@ -1,7 +1,7 @@
 {
   "name": "applymate",
   "version": "0.1.0",
-  "description": "Applymate — harness-agnostic job-application agent distro: a dossier-driven pipeline + local chat/review UI, operated by any AI CLI harness (Claude Code, Codex, Cursor, ZCode, Gemini CLI, ...).",
+  "description": "Applymate \u2014 harness-agnostic job-application agent distro: a dossier-driven pipeline + local chat/review UI, operated by any AI CLI harness (Claude Code, Codex, Cursor, ZCode, Gemini CLI, ...).",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -17,10 +17,11 @@
     "applymate": "bin/applymate.ts"
   },
   "scripts": {
-    "test": "node --test --test-force-exit test/*.test.ts",
+    "test": "node --test --test-force-exit test/*.test.ts && npm run -s test:rig",
     "test:watch": "node --test --watch --test-force-exit test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "applymate": "node bin/applymate.ts"
+    "applymate": "node bin/applymate.ts",
+    "test:rig": "python3 -m unittest discover -s browser-rig/tests"
   },
   "keywords": [
     "agent",

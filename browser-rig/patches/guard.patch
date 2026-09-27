@@ -1,0 +1,38 @@
+diff --git a/jev_ultrafast/agent.py b/jev_ultrafast/agent.py
+index 0a2a07d..b2f09e3 100644
+--- a/jev_ultrafast/agent.py
++++ b/jev_ultrafast/agent.py
+@@ -112,6 +112,13 @@ class Agent:
+                 if choice and state["_stale_count"] >= 3:
+                     state.setdefault("excluded", set()).add(choice)
+                     state["_stale_count"] = 0
++                # per-choice failure counts: alternating failing choices must not reset each other
++                counts = state.setdefault("_fail_counts", {})
++                if choice:
++                    counts[choice] = counts.get(choice, 0) + 1
++                    if counts[choice] >= 3:
++                        state.setdefault("excluded", set()).add(choice)
++                        counts[choice] = 0
+                 state["decision"] = None
+                 state["status"] = "ready"
+                 state["page"] = self._observe()
+diff --git a/jev_ultrafast/model.py b/jev_ultrafast/model.py
+index 30a7204..c5fabc6 100644
+--- a/jev_ultrafast/model.py
++++ b/jev_ultrafast/model.py
+@@ -8,6 +8,7 @@ import time
+ import httpx
+ 
+ from .questions import NEXT_ACTION, TARGET, TEXT_VALUE
++from .guard import apply_spec  # deterministic task-spec guardrails
+ 
+ CLIENT = httpx.Client(http2=True, timeout=25)
+ 
+@@ -90,6 +91,7 @@ def choose(state, goal, history, exclude_ops=()):
+     operations.update(DONE="Every requirement is visibly satisfied.", BLOCKED="No supported operation can progress.")
+     for op in exclude_ops:
+         operations.pop(op, None)
++    apply_spec(operations, elements, state.get("text", ""), targets)
+     questions = {
+         "operation": {"type": "choice", "criteria": operations, "instructions": {"goal": goal, "rules": NEXT_ACTION}}
+     }
