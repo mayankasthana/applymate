@@ -12,13 +12,13 @@ test("append assigns sequential ids and persists to disk", async () => {
   await withTmpDir(async (root) => {
     const log = makeLog(root);
     const m1 = await log.append({ from: "user", text: "hello agent" });
-    const m2 = await log.append({ from: "agent", text: "hello captain" });
+    const m2 = await log.append({ from: "agent", text: "hello candidate" });
     assert.equal(m1.id, 1);
     assert.equal(m2.id, 2);
     const reloaded = new ChatLog({ filePath: join(root, "chat", "log.jsonl") });
     const all = await reloaded.list();
     assert.equal(all.length, 2);
-    assert.equal(all[1]!.text, "hello captain");
+    assert.equal(all[1]!.text, "hello candidate");
   });
 });
 
@@ -84,7 +84,7 @@ test("poll waits for a user message that arrives while waiting", async () => {
   });
 });
 
-test("poll ignores agent messages when waiting for the captain", async () => {
+test("poll ignores agent messages when waiting for the candidate", async () => {
   await withTmpDir(async (root) => {
     const log = makeLog(root);
     setTimeout(() => void log.append({ from: "agent", text: "self talk" }), 100);
