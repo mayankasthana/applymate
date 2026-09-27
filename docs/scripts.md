@@ -83,6 +83,16 @@ submitted/interviewing. `ready` requires a resume artifact. Nothing moves to
 | `chat log [--since n]` | Full transcript |
 | `chat serve [--port p]` | Local chat/review UI (loopback only) |
 
+## Browser rig (local laya form-filling rig)
+
+| command | what it does |
+|---|---|
+| `rig spec [--name n] [--submit --success-text re] [--out f]` | Build a task spec for `browser-rig/spec_server.py` from the stored answers + `candidateName` pref. Default mode `stage`: DONE unlocks when every mapped field visibly holds its value (fill, never submit). `--submit` unlocks DONE on the success text instead — only for forms the candidate explicitly approved. Writes `workspace/rig/<name>.spec.json` (personal data — never committed) |
+| `rig check [--cdp u] [--decision u] [--spec u]` | Probe the rig's three services (headless Chrome CDP :9222, laya decision server :8791, spec server :30000); exit 1 if any is down |
+
+The rig itself lives in `browser-rig/` (setup, guardrails, benchmarks, tests) — see
+`browser-rig/README.md`.
+
 ## Artifacts
 
 | command | what it does |

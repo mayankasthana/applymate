@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { parseArgs } from "./args.ts";
 import { loadConfig, saveConfig, type Config, type PersistedConfig } from "./config.ts";
@@ -9,6 +9,8 @@ import { scoreMatch, type MatchReport } from "./services/matcher.ts";
 import { renderDocument } from "./services/markdown.ts";
 import { writeJsonAtomic } from "./fsutil.ts";
 import { type PrefValue } from "./services/profile.ts";
+import { buildFormSpec } from "./form-spec.ts";
+import { checkRigServices, DEFAULT_RIG_ENDPOINTS } from "./services/rig.ts";
 import { type Job, type Evidence } from "./domain.ts";
 
 interface Io {
@@ -560,6 +562,46 @@ async function cmdRender({ pos, flags, io }: CommandContext): Promise<number> {
   return 0;
 }
 
+async function cmdRigSpec({ flags, io, rootDir }: CommandContext): Promise<number> {
+  const name = String(flags.name ?? "application");
+  const mode = flags.submit ? "submit" as const : "stage" as const;
+  const successText = flags["success-text"] !== undefined ? String(flags["success-text"]) : undefined;
+  const { profile, paths } = await services(rootDir);
+  const [answers, prefs] = await Promise.all([profile.answers(), profile.preferences()]);
+  const candidateName = prefs.find((p) => p.key === "candidatename")?.value;
+  let spec;
+  try {
+    spec = buildFormSpec({
+      name,
+      answers,
+      candidateName: candidateName === undefined ? undefined : String(candidateName),
+      mode,
+      successText,
+      suppressClick: flags["suppress-click"] !== undefined ? [String(flags["suppress-click"])] : [],
+    });
+  } catch (err) {
+    return failWith(io, "rig spec [--name n] [--submit --success-text re] [--suppress-click re] [--out f]", (err as Error).message);
+  }
+  const out = flags.out !== undefined ? resolve(rootDir, String(flags.out)) : join(paths.root, "rig", `${name}.spec.json`);
+  await writeJsonAtomic(out, spec);
+  if (flags.json) return jsonOut(io, { writtenTo: out, spec });
+  line(io, `spec written: ${out}`);
+  line(io, `mode=${mode}  mapped fields=${spec.field_map.length}  required gates=${spec.required.length}`);
+  return 0;
+}
+
+async function cmdRigCheck({ flags, io }: CommandContext): Promise<number> {
+  const endpoints = {
+    cdp: String(flags.cdp ?? DEFAULT_RIG_ENDPOINTS.cdp),
+    decision: String(flags.decision ?? DEFAULT_RIG_ENDPOINTS.decision),
+    spec: String(flags.spec ?? DEFAULT_RIG_ENDPOINTS.spec),
+  };
+  const checks = await checkRigServices(fetch, endpoints);
+  if (flags.json) return jsonOut(io, checks);
+  for (const c of checks) line(io, `${c.ok ? "ok  " : "DOWN"}  ${c.service.padEnd(11)} ${c.url}  ${c.detail}`);
+  return checks.every((c) => c.ok) ? 0 : 1;
+}
+
 function printHelp(io: Io, code = 0): number {
   const target = code === 0 ? io.stdout : io.stderr;
   target.write(
@@ -605,6 +647,10 @@ function printHelp(io: Io, code = 0): number {
       "  chat log [--since n]            full transcript",
       "  chat serve [--port p]           open the local chat/review UI",
       "",
+      "browser rig (local laya form-filling rig, browser-rig/):",
+      "  rig spec [--name n] [--submit --success-text re] [--out f]",
+      "  rig check [--cdp u] [--decision u] [--spec u]   probe rig services",
+      "",
       "artifacts:",
       "  render <file.md> [--out f.html]   markdown -> reviewable html",
       "",
@@ -627,6 +673,8 @@ const COMMANDS: Command[] = [
   { name: "answers set", summary: "remember a form answer", run: cmdAnswersSet },
   { name: "answers get", summary: "recall a form answer", run: cmdAnswersGet },
   { name: "answers list", summary: "list stored answers", run: cmdAnswersList },
+  { name: "rig spec", summary: "build a rig task spec from stored answers", run: cmdRigSpec },
+  { name: "rig check", summary: "probe the local browser rig services", run: cmdRigCheck },
   { name: "job add", summary: "add a job posting", run: cmdJobAdd },
   { name: "job list", summary: "list jobs", run: cmdJobList },
   { name: "job show", summary: "show a job", run: cmdJobShow },
