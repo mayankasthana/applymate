@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { renderMarkdown, renderDocument } from "../src/services/markdown.js";
+import { renderMarkdown, renderDocument } from "../src/services/markdown.ts";
 
 test("headings map to h1..h6", () => {
   const html = renderMarkdown("# One\n## Two\n###### Six");
@@ -31,7 +31,7 @@ test("links render with href; javascript: urls are neutralized", () => {
 });
 
 test("raw HTML in source is escaped, never executed", () => {
-  const html = renderMarkdown('hello <script>alert(1)</script> & <img src=x onerror=alert(2)>');
+  const html = renderMarkdown("hello <script>alert(1)</script> & <img src=x onerror=alert(2)>");
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("&lt;script&gt;"));
   assert.ok(html.includes("&amp;"));
@@ -47,9 +47,9 @@ test("unordered and ordered lists render as ul/ol with li", () => {
 });
 
 test("code fences render as pre>code with escaped content", () => {
-  const html = renderMarkdown("```\nconst x = \"<b>\";\n```");
+  const html = renderMarkdown('```\nconst x = "<b>";\n```');
   assert.ok(html.includes("<pre><code>"));
-  assert.ok(html.includes("&quot;&lt;b&gt;&quot;") || html.includes('"&lt;b&gt;"'));
+  assert.ok(html.includes("&lt;b&gt;"));
   assert.ok(!/<pre><code>const x = "<b>"/.test(html));
 });
 

@@ -4,7 +4,7 @@
  * tokens like "c++", "ci/cd" and "node.js" survive tokenization.
  */
 
-const STOPWORDS = new Set(
+const STOPWORDS: ReadonlySet<string> = new Set(
   `a about above able across after again against all along already also although always among
    an and any anyone anything are around as at back be because been before being below best better
    between both build building built but by can cannot come could did do does doing done down due
@@ -24,15 +24,15 @@ const STOPWORDS = new Set(
 );
 
 const TOKEN_RE = /[a-z0-9][a-z0-9+#./_-]*/g;
-// Trailing "+" and "#" are kept: they are part of tech names (c++, f#, j#).
+// Trailing "+" and "#" are kept: they are part of tech names (c++, f#).
 const EDGE_JUNK = /^[#+./_-]+|[./_-]+$/g;
 
 /** Lowercased tokens: stopwords, pure numbers, and 1-char tokens removed.
  *  The floor is 2 chars on purpose — "go", "js", "ai", "ux" are real tech terms. */
-export function extractTerms(text) {
+export function extractTerms(text: string | null | undefined): string[] {
   if (!text) return [];
   const lowered = String(text).toLowerCase();
-  const out = [];
+  const out: string[] = [];
   for (const raw of lowered.match(TOKEN_RE) ?? []) {
     const token = raw.replace(EDGE_JUNK, "");
     if (token.length < 2) continue;
@@ -50,20 +50,22 @@ export function extractTerms(text) {
   return out;
 }
 
-/** @returns {Map<string, number>} term -> occurrences */
-export function termCounts(text) {
-  const counts = new Map();
+/** term -> occurrence count */
+export function termCounts(text: string | null | undefined): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const term of extractTerms(text)) {
     counts.set(term, (counts.get(term) ?? 0) + 1);
   }
   return counts;
 }
 
-/**
- * @param {Map<string, number>} counts
- * @returns {Array<{term: string, count: number}>} sorted by count desc, then term asc
- */
-export function topTerms(counts, { limit = 25, minCount = 1 } = {}) {
+export interface TermCount {
+  term: string;
+  count: number;
+}
+
+/** Sorted by count desc, then term asc. */
+export function topTerms(counts: Map<string, number>, { limit = 25, minCount = 1 }: { limit?: number; minCount?: number } = {}): TermCount[] {
   const entries = [...counts.entries()]
     .filter(([, count]) => count >= minCount)
     .map(([term, count]) => ({ term, count }));

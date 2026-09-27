@@ -1,28 +1,70 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 
-import { termCounts, topTerms, extractTerms } from "./terms.js";
-import { writeJsonAtomic } from "../fsutil.js";
+import { termCounts, topTerms, extractTerms } from "./terms.ts";
+import { writeJsonAtomic } from "../fsutil.ts";
 
 const INDEX_VERSION = 1;
 const TEXT_EXTENSIONS = /\.(md|markdown|txt)$/i;
 const FILE_KEYWORD_LIMIT = 30;
 const GLOBAL_KEYWORD_LIMIT = 200;
 
+export type DossierKind = "master-resume" | "cover-letter" | "skills" | "background" | "resume" | "other";
+
+export interface DossierFile {
+  path: string;
+  kind: DossierKind;
+  title: string;
+  sections: string[];
+  words: number;
+  bytes: number;
+  keywords: { term: string; count: number }[];
+}
+
+export interface DossierIndex {
+  version: number;
+  indexedAt: string;
+  root: string;
+  files: DossierFile[];
+  keywords: { term: string; count: number; files: number }[];
+  stats: { files: number; words: number };
+}
+
+export interface DossierHit {
+  path: string;
+  kind: DossierKind;
+  title: string;
+  score: number;
+  matched: string[];
+}
+
+/** Classify a dossier file by its path: what kind of document is it? */
+export function classify(relPath: string): DossierKind {
+  const p = relPath.toLowerCase();
+  if (/master/.test(p)) return "master-resume";
+  if (/cover/.test(p)) return "cover-letter";
+  if (/(skill|competenc)/.test(p)) return "skills";
+  if (/(history|experience|education|achievement|accomplishment|fact)/.test(p) || /(^|\/)facts\//.test(p)) return "background";
+  if (/(^|\/)(resumes?|cv)(\/|$)/.test(p) || /(resume|cv)[.-]/.test(p)) return "resume";
+  return "other";
+}
+
 /**
  * Service: scans a resume dossier directory into a searchable profile index
  * (titles, sections, per-file keywords) and answers retrieval queries.
  */
 export class DossierIndexer {
-  constructor(dossierDir) {
+  readonly dossierDir: string;
+
+  constructor(dossierDir: string) {
     this.dossierDir = dossierDir;
   }
 
   /** Walk the dossier and build the profile index. */
-  async index({ now = new Date().toISOString() } = {}) {
+  async index({ now = new Date().toISOString() }: { now?: string } = {}): Promise<DossierIndex> {
     const paths = await this.#walk(this.dossierDir);
-    const files = [];
-    const globalCounts = new Map();
+    const files: DossierFile[] = [];
+    const globalCounts = new Map<string, number>();
     for (const abs of paths) {
       const rel = relative(this.dossierDir, abs).split(sep).join("/");
       const content = await readFile(abs, "utf8");
@@ -40,7 +82,7 @@ export class DossierIndexer {
         keywords: topTerms(counts, { limit: FILE_KEYWORD_LIMIT }),
       });
     }
-    const fileCountFor = (term) => files.filter((f) => f.keywords.some((k) => k.term === term)).length;
+    const fileCountFor = (term: string) => files.filter((f) => f.keywords.some((k) => k.term === term)).length;
     const keywords = topTerms(globalCounts, { limit: GLOBAL_KEYWORD_LIMIT }).map((k) => ({
       ...k,
       files: fileCountFor(k.term),
@@ -58,22 +100,19 @@ export class DossierIndexer {
     };
   }
 
-  /**
-   * Rank dossier files against a free-text query (job description excerpt,
-   * skill list, ...). Returns [{ path, kind, title, score, matched }].
-   */
-  search(index, query) {
+  /** Rank dossier files against a free-text query (JD excerpt, skills, ...). */
+  search(index: DossierIndex, query: string): DossierHit[] {
     const terms = [...new Set(extractTerms(query))];
-    const hits = [];
+    const hits: DossierHit[] = [];
     for (const file of index.files ?? []) {
       const kw = new Map(file.keywords.map((k) => [k.term, k.count]));
       const titleLc = file.title.toLowerCase();
       const sectionsLc = file.sections.join(" \n ").toLowerCase();
       let score = 0;
-      const matched = [];
+      const matched: string[] = [];
       for (const term of terms) {
         let termScore = 0;
-        if (kw.has(term)) termScore += 2 + 0.1 * Math.min(kw.get(term), 5);
+        if (kw.has(term)) termScore += 2 + 0.1 * Math.min(kw.get(term) ?? 0, 5);
         if (titleLc.includes(term)) termScore += 3;
         if (sectionsLc.includes(term)) termScore += 1;
         if (termScore > 0) {
@@ -86,18 +125,18 @@ export class DossierIndexer {
     return hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
   }
 
-  async save(index, filePath) {
+  async save(index: DossierIndex, filePath: string): Promise<string> {
     await writeJsonAtomic(filePath, index);
     return filePath;
   }
 
-  async #walk(dir) {
-    const out = [];
+  async #walk(dir: string): Promise<string[]> {
+    const out: string[] = [];
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch (err) {
-      throw new Error(`cannot read dossier directory ${dir}: ${err.message}`, { cause: err });
+      throw new Error(`cannot read dossier directory ${dir}: ${(err as Error).message}`, { cause: err });
     }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
@@ -112,35 +151,29 @@ export class DossierIndexer {
   }
 }
 
-export async function loadDossierIndex(indexPath) {
-  return JSON.parse(await readFile(indexPath, "utf8"));
+export async function loadDossierIndex(indexPath: string): Promise<DossierIndex> {
+  return JSON.parse(await readFile(indexPath, "utf8")) as DossierIndex;
 }
 
-/** Classify a dossier file by its path: what kind of document is it? */
-export function classify(relPath) {
-  const p = relPath.toLowerCase();
-  if (/master/.test(p)) return "master-resume";
-  if (/cover/.test(p)) return "cover-letter";
-  if (/(skill|competenc)/.test(p)) return "skills";
-  if (/(history|experience|education|achievement|accomplishment|fact)/.test(p) || /(^|\/)facts\//.test(p)) return "background";
-  if (/(^|\/)(resumes?|cv)(\/|$)/.test(p) || /(resume|cv)[.-]/.test(p)) return "resume";
-  return "other";
+/** Search an index without needing an indexer instance. */
+export function searchDossier(index: DossierIndex, query: string): DossierHit[] {
+  return new DossierIndexer(".").search(index, query);
 }
 
-function firstHeading(content) {
+function firstHeading(content: string): string | null {
   const m = content.match(/^#\s+(.+)$/m);
-  return m ? m[1].trim() : null;
+  return m ? m[1]!.trim() : null;
 }
 
-function markdownHeadings(content) {
-  const out = [];
+function markdownHeadings(content: string): string[] {
+  const out: string[] = [];
   for (const line of content.split(/\r?\n/)) {
     const m = line.match(/^(#{2,6})\s+(.+?)\s*#*\s*$/);
-    if (m) out.push(m[2].trim());
+    if (m) out.push(m[2]!.trim());
   }
   return out;
 }
 
-function round2(n) {
+function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

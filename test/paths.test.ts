@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { expandTilde, resolveFrom } from "../src/paths.js";
+import { expandTilde, resolveFrom } from "../src/paths.ts";
 
 test("expandTilde expands a bare ~ to the home directory", () => {
   assert.equal(expandTilde("~"), homedir());

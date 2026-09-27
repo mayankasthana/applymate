@@ -9,7 +9,7 @@ import {
   TERMINAL_STATUSES,
   canTransition,
   assertTransition,
-} from "../src/domain.js";
+} from "../src/domain.ts";
 
 const JOB_INPUT = {
   company: "Acme Corp",
@@ -26,6 +26,7 @@ test("Job.create validates required fields and fills defaults", () => {
   assert.equal(job.location, null);
   assert.equal(job.url, null);
   assert.equal(job.addedAt, "2026-09-27T00:00:00Z");
+  assert.equal(job.matchScore, null);
 });
 
 test("Job.create requires company, title and a non-empty description", () => {
@@ -40,17 +41,32 @@ test("Job.create accepts https job posting urls", () => {
   assert.equal(job.url, "https://jobs.acme.com/123");
 });
 
+test("Job.validate normalizes legacy records missing match fields", () => {
+  const job = Job.validate({
+    id: "job-x",
+    company: "A",
+    title: "B",
+    description: "d",
+    location: null,
+    url: null,
+    addedAt: "t",
+  } as never);
+  assert.equal(job.matchScore, null);
+  assert.equal(job.matchReportPath, null);
+  assert.equal(job.matchedAt, null);
+});
+
 test("Job.validate rejects a loaded record missing required fields", () => {
-  assert.throws(() => Job.validate({ id: "job-x", company: "A", title: "B" }), DomainError);
+  assert.throws(() => Job.validate({ id: "job-x", company: "A", title: "B" } as never), DomainError);
   assert.doesNotThrow(() =>
-    Job.validate({ id: "job-x", company: "A", title: "B", description: "d", location: null, url: null, addedAt: "t" })
+    Job.validate({ id: "job-x", company: "A", title: "B", description: "d", location: null, url: null, addedAt: "t" } as never)
   );
 });
 
 test("status machine: happy path is walkable", () => {
-  const path = ["discovered", "matched", "tailoring", "ready", "submitted", "interviewing", "offer"];
+  const path = ["discovered", "matched", "tailoring", "ready", "submitted", "interviewing", "offer"] as const;
   for (let i = 0; i < path.length - 1; i++) {
-    assert.ok(canTransition(path[i], path[i + 1]), `${path[i]} -> ${path[i + 1]}`);
+    assert.ok(canTransition(path[i]!, path[i + 1]!), `${path[i]} -> ${path[i + 1]}`);
   }
 });
 
@@ -73,10 +89,7 @@ test("status machine: illegal jumps are rejected", () => {
 });
 
 test("Application.create starts in discovered with empty artifacts and history", () => {
-  const app = Application.create(
-    { jobId: "job-acme-xxxx", resumeRef: "resumes/acme.md" },
-    { now: "2026-09-27T00:00:00Z" }
-  );
+  const app = Application.create({ jobId: "job-acme-xxxx", resumeRef: "resumes/acme.md" }, { now: "2026-09-27T00:00:00Z" });
   assert.match(app.id, /^app-[a-z0-9]{4}$/);
   assert.equal(app.jobId, "job-acme-xxxx");
   assert.equal(app.status, "discovered");
@@ -93,18 +106,14 @@ test("Application.create requires a jobId", () => {
 
 test("Application.recordTransition appends history and moves status", () => {
   const app = Application.create({ jobId: "job-acme-xxxx" }, { now: "2026-09-27T00:00:00Z" });
-  const moved = Application.recordTransition(app, "matched", {
-    at: "2026-09-27T01:00:00Z",
-    note: "scored 82",
-  });
+  const moved = Application.recordTransition(app, "matched", { at: "2026-09-27T01:00:00Z", note: "scored 82" });
   assert.equal(moved.status, "matched");
   assert.equal(moved.history.length, 1);
-  assert.equal(moved.history[0].from, "discovered");
-  assert.equal(moved.history[0].to, "matched");
-  assert.equal(moved.history[0].note, "scored 82");
+  assert.equal(moved.history[0]!.from, "discovered");
+  assert.equal(moved.history[0]!.to, "matched");
+  assert.equal(moved.history[0]!.note, "scored 82");
   assert.equal(moved.updatedAt, "2026-09-27T01:00:00Z");
-  // original untouched (immutable update)
-  assert.equal(app.status, "discovered");
+  assert.equal(app.status, "discovered"); // original untouched (immutable update)
 });
 
 test("Application.recordTransition refuses illegal moves", () => {

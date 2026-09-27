@@ -3,10 +3,10 @@
  * Persistence, orchestration and presentation live in services/adapters.
  */
 
-import { makeId } from "./ids.js";
+import { makeId } from "./ids.ts";
 
 export class DomainError extends Error {
-  constructor(message) {
+  constructor(message: string) {
     super(message);
     this.name = "DomainError";
   }
@@ -16,16 +16,44 @@ export class DomainError extends Error {
 // Job
 // ---------------------------------------------------------------------------
 
+export interface Job {
+  id: string;
+  company: string;
+  title: string;
+  description: string;
+  location: string | null;
+  url: string | null;
+  addedAt: string;
+  /** Last dossier-match score (null = never scored). Drives the relevance gate. */
+  matchScore: number | null;
+  matchReportPath: string | null;
+  matchedAt: string | null;
+}
+
+export interface JobInput {
+  id?: string;
+  company?: unknown;
+  title?: unknown;
+  description?: unknown;
+  location?: unknown;
+  url?: unknown;
+  addedAt?: string;
+}
+
 export class Job {
-  static create(input, { now = new Date().toISOString() } = {}) {
-    const job = {
-      id: input.id ?? makeId("job", `${input.company ?? ""} ${input.title ?? ""}`),
+  /** Create a validated job, generating an id when absent. */
+  static create(input: JobInput, { now = new Date().toISOString() } = {}): Job {
+    const job: Job = {
+      id: input.id ?? makeId("job", `${str(input.company)} ${str(input.title)}`),
       company: str(input.company),
       title: str(input.title),
       description: str(input.description),
       location: strOr(input.location, null),
       url: strOr(input.url, null),
       addedAt: input.addedAt ?? now,
+      matchScore: null,
+      matchReportPath: null,
+      matchedAt: null,
     };
     Job.validate(job, { requireId: false });
     if (job.url !== null && !/^https?:\/\/\S+$/.test(job.url)) {
@@ -34,14 +62,17 @@ export class Job {
     return job;
   }
 
-  /** Validate a loaded record (id included). */
-  static validate(job, { requireId = true } = {}) {
-    const missing = ["company", "title", "description"].filter((k) => !str(job[k]));
+  /** Validate a loaded record (id included), normalizing optional fields. */
+  static validate(job: Job, { requireId = true } = {}): Job {
+    const missing = (["company", "title", "description"] as const).filter((k) => !str(job[k]));
     if (missing.length) {
       throw new DomainError(`job is missing required fields: ${missing.join(", ")}`);
     }
     if (requireId && !str(job.id)) throw new DomainError("job is missing required field: id");
     if (!str(job.addedAt)) throw new DomainError("job is missing required field: addedAt");
+    job.matchScore = typeof job.matchScore === "number" ? job.matchScore : null;
+    job.matchReportPath = strOr(job.matchReportPath, null);
+    job.matchedAt = strOr(job.matchedAt, null);
     return job;
   }
 }
@@ -50,7 +81,7 @@ export class Job {
 // Application status machine
 // ---------------------------------------------------------------------------
 
-export const STATUSES = Object.freeze([
+export const STATUSES = [
   "discovered",
   "matched",
   "tailoring",
@@ -60,11 +91,13 @@ export const STATUSES = Object.freeze([
   "offer",
   "rejected",
   "closed",
-]);
+] as const;
 
-export const TERMINAL_STATUSES = Object.freeze(["rejected", "closed"]);
+export type Status = (typeof STATUSES)[number];
 
-const TRANSITIONS = Object.freeze({
+export const TERMINAL_STATUSES: readonly Status[] = ["rejected", "closed"];
+
+const TRANSITIONS: Record<Status, readonly Status[]> = {
   discovered: ["matched", "closed"],
   matched: ["tailoring", "closed"],
   tailoring: ["ready", "closed"],
@@ -74,15 +107,21 @@ const TRANSITIONS = Object.freeze({
   offer: ["closed"],
   rejected: [],
   closed: [],
-});
+};
 
-export function canTransition(from, to) {
-  return (TRANSITIONS[from] ?? []).includes(to);
+export function isStatus(value: string): value is Status {
+  return (STATUSES as readonly string[]).includes(value);
 }
 
-export function assertTransition(from, to) {
+export function canTransition(from: Status, to: Status): boolean {
+  return TRANSITIONS[from].includes(to);
+}
+
+export function assertTransition(from: Status, to: Status): true {
   if (!canTransition(from, to)) {
-    throw new DomainError(`illegal status transition ${from} -> ${to} (allowed: ${(TRANSITIONS[from] ?? []).join(", ") || "none"})`);
+    throw new DomainError(
+      `illegal status transition ${from} -> ${to} (allowed: ${TRANSITIONS[from].join(", ") || "none"})`
+    );
   }
   return true;
 }
@@ -91,8 +130,40 @@ export function assertTransition(from, to) {
 // Application
 // ---------------------------------------------------------------------------
 
+export interface ApplicationArtifacts {
+  resume: string | null;
+  coverLetter: string | null;
+  notes: string | null;
+}
+
+export interface HistoryEntry {
+  at: string;
+  from: Status;
+  to: Status;
+  note: string | null;
+}
+
+export interface Application {
+  id: string;
+  jobId: string;
+  status: Status;
+  resumeRef: string | null;
+  matchScore: number | null;
+  matchReportPath: string | null;
+  artifacts: ApplicationArtifacts;
+  history: HistoryEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApplicationInput {
+  id?: string;
+  jobId?: unknown;
+  resumeRef?: unknown;
+}
+
 export class Application {
-  static create(input, { now = new Date().toISOString() } = {}) {
+  static create(input: ApplicationInput, { now = new Date().toISOString() } = {}): Application {
     const jobId = str(input.jobId);
     if (!jobId) throw new DomainError("application is missing required field: jobId");
     return {
@@ -110,17 +181,21 @@ export class Application {
   }
 
   /** Validate a loaded record. */
-  static validate(app) {
+  static validate(app: Application): Application {
     if (!str(app.id)) throw new DomainError("application is missing required field: id");
     if (!str(app.jobId)) throw new DomainError("application is missing required field: jobId");
-    if (!STATUSES.includes(app.status)) {
-      throw new DomainError(`application has unknown status: ${app.status}`);
+    if (!isStatus(app.status)) {
+      throw new DomainError(`application has unknown status: ${String(app.status)}`);
     }
     return app;
   }
 
   /** Immutable status move with history entry; enforces the machine. */
-  static recordTransition(app, to, { at = new Date().toISOString(), note = null } = {}) {
+  static recordTransition(
+    app: Application,
+    to: Status,
+    { at = new Date().toISOString(), note = null }: { at?: string; note?: string | null } = {}
+  ): Application {
     assertTransition(app.status, to);
     return {
       ...app,
@@ -131,11 +206,11 @@ export class Application {
   }
 }
 
-function str(v) {
+function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-function strOr(v, fallback) {
+function strOr<T>(v: unknown, fallback: T): string | T {
   const s = str(v);
   return s || fallback;
 }

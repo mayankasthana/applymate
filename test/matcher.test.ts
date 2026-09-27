@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-
-import { scoreMatch, grade } from "../src/services/matcher.js";
-import { DossierIndexer } from "../src/services/dossier.js";
-import { withTmpDir } from "./helpers.js";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
+
+import { scoreMatch, grade } from "../src/services/matcher.ts";
+import { DossierIndexer } from "../src/services/dossier.ts";
+import { withTmpDir } from "./helpers.ts";
 
 const JD = `
 Senior Backend Engineer — Acme Corp
@@ -16,19 +16,19 @@ Responsibilities:
 - Infrastructure as code with Terraform on AWS
 `;
 
-async function makeIndex(root, dossierText) {
-  const dir = join(root, "dossier");
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, "master-resume.md"), dossierText);
-  return new DossierIndexer(dir).index();
-}
-
 const DOSSIER = `
 # Master Resume
 Senior backend engineer with 12 years building distributed services.
 Design and operate Kafka event streaming pipelines with exactly-once ingestion.
 Build services in Go on Kubernetes. Infrastructure as code with Terraform on AWS.
 `;
+
+async function makeIndex(root: string, dossierText: string) {
+  const dir = join(root, "dossier");
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "master-resume.md"), dossierText);
+  return new DossierIndexer(dir).index();
+}
 
 test("scoreMatch returns a strong grade when the dossier covers the JD", async () => {
   await withTmpDir(async (root) => {
@@ -42,14 +42,13 @@ test("scoreMatch returns a strong grade when the dossier covers the JD", async (
   });
 });
 
-test("scoreMatch lists missing JD terms sorted by JD frequency", async () => {
+test("scoreMatch lists missing JD terms", async () => {
   await withTmpDir(async (root) => {
     const index = await makeIndex(root, "# Master\nKafka streaming pipelines.");
     const report = scoreMatch(JD, index);
     assert.ok(report.missing.includes("terraform"));
     assert.ok(report.missing.includes("aws"));
     assert.ok(report.missing.includes("kubernetes"));
-    // kafka IS matched
     assert.ok(report.matched.some((m) => m.term === "kafka"));
     assert.ok(report.score > 0 && report.score < 100);
   });
@@ -78,21 +77,18 @@ test("scoreMatch handles empty JD and empty index without crashing", async () =>
   });
 });
 
-test("matchJob suggests the best-matching resume to tailor from", async () => {
+test("scoreMatch suggests the best-matching resume to tailor from", async () => {
   await withTmpDir(async (root) => {
     const dir = join(root, "dossier");
     await mkdir(join(dir, "resumes"), { recursive: true });
     await writeFile(join(dir, "master-resume.md"), DOSSIER);
-    await writeFile(
-      join(dir, "resumes", "acme.md"),
-      "# Acme tailored\nKafka Go Terraform AWS. Kafka Go Terraform AWS. Kafka on Kubernetes."
-    );
+    await writeFile(join(dir, "resumes", "acme.md"), "# Acme tailored\nKafka Go Terraform AWS. Kafka Go Terraform AWS. Kafka on Kubernetes.");
     const indexer = new DossierIndexer(dir);
     const index = await indexer.index();
     const report = scoreMatch(JD, index, { indexer });
     assert.equal(report.grade, "strong");
-    assert.ok(report.suggestions.length >= 1);
-    assert.equal(report.suggestions[0].path, "resumes/acme.md");
-    assert.ok(["resume", "master-resume"].includes(report.suggestions[0].kind));
+    assert.ok(report.suggestions && report.suggestions.length >= 1);
+    assert.equal(report.suggestions![0]!.path, "resumes/acme.md");
+    assert.ok(["resume", "master-resume"].includes(report.suggestions![0]!.kind));
   });
 });

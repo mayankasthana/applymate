@@ -2,24 +2,23 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
-import { PipelineService } from "../src/services/pipeline.js";
-import { JsonCollection, StoreError } from "../src/adapters/json-collection.js";
-import { Job, Application } from "../src/domain.js";
-import { withTmpDir } from "./helpers.js";
+import { PipelineService, RelevanceError } from "../src/services/pipeline.ts";
+import { JsonCollection, type Collection } from "../src/adapters/json-collection.ts";
+import { Job, Application, type Job as JobRecord, type Application as AppRecord } from "../src/domain.ts";
+import { withTmpDir } from "./helpers.ts";
 
-async function makeService(root) {
-  const jobs = new JsonCollection({
-    dir: join(root, "jobs"),
-    entityName: "job",
-    validate: (r) => Job.validate(r),
-  });
-  const applications = new JsonCollection({
+async function makeCollections(root: string): Promise<{ jobs: Collection<JobRecord>; applications: Collection<AppRecord> }> {
+  const jobs = new JsonCollection<JobRecord>({ dir: join(root, "jobs"), entityName: "job", validate: (r) => Job.validate(r) });
+  const applications = new JsonCollection<AppRecord>({
     dir: join(root, "applications"),
     entityName: "application",
     validate: (r) => Application.validate(r),
   });
-  return new PipelineService({ jobs, applications });
+  return { jobs, applications };
 }
+
+const makeService = async (root: string, minMatchScore = 0) =>
+  new PipelineService({ ...(await makeCollections(root)), minMatchScore });
 
 const JOB_INPUT = {
   company: "Acme Corp",
@@ -41,7 +40,7 @@ test("addJob persists a valid job and getJob/listJobs roundtrip it", async () =>
 test("addJob rejects invalid input with DomainError", async () => {
   await withTmpDir(async (root) => {
     const svc = await makeService(root);
-    await assert.rejects(() => svc.addJob({ ...JOB_INPUT, description: " " }), (err) => err.name === "DomainError");
+    await assert.rejects(() => svc.addJob({ ...JOB_INPUT, description: " " }), (err: unknown) => (err as Error).name === "DomainError");
   });
 });
 
@@ -62,7 +61,10 @@ test("startApplication refuses unknown jobs and duplicate open applications", as
   await withTmpDir(async (root) => {
     const svc = await makeService(root);
     const job = await svc.addJob(JOB_INPUT);
-    await assert.rejects(() => svc.startApplication("job-missing"), (err) => err instanceof StoreError && err.code === "NOT_FOUND");
+    await assert.rejects(
+      () => svc.startApplication("job-missing"),
+      (err: unknown) => (err as { code?: string }).code === "NOT_FOUND"
+    );
     await svc.startApplication(job.id);
     await assert.rejects(() => svc.startApplication(job.id), /already has an open application/i);
   });
@@ -79,6 +81,40 @@ test("a new application may start after the previous one closed", async () => {
   });
 });
 
+test("relevance gate: below-floor scores are refused, force bypasses", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root, 60);
+    const job = await svc.addJob(JOB_INPUT);
+    await svc.setJobMatch(job.id, { score: 42 });
+    await assert.rejects(() => svc.startApplication(job.id), RelevanceError);
+    const app = await svc.startApplication(job.id, { force: true });
+    assert.equal(app.status, "discovered");
+  });
+});
+
+test("relevance gate: at/above floor passes; unscored jobs pass", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root, 60);
+    const atFloor = await svc.addJob(JOB_INPUT);
+    await svc.setJobMatch(atFloor.id, { score: 60 });
+    await svc.startApplication(atFloor.id);
+
+    const unscored = await svc.addJob({ ...JOB_INPUT, company: "Globex" });
+    await svc.startApplication(unscored.id);
+  });
+});
+
+test("setJobMatch persists score and timestamp on the job", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root);
+    const job = await svc.addJob(JOB_INPUT);
+    const updated = await svc.setJobMatch(job.id, { score: 82.4, reportPath: "jobs/x/match.json", at: "t0" });
+    assert.equal(updated.matchScore, 82);
+    assert.equal(updated.matchReportPath, "jobs/x/match.json");
+    assert.equal(updated.matchedAt, "t0");
+  });
+});
+
 test("move applies the status machine and persists history", async () => {
   await withTmpDir(async (root) => {
     const svc = await makeService(root);
@@ -86,8 +122,7 @@ test("move applies the status machine and persists history", async () => {
     const app = await svc.startApplication(job.id);
     const moved = await svc.move(app.id, "matched", { note: "82% match" });
     assert.equal(moved.status, "matched");
-    assert.equal(moved.history[0].note, "82% match");
-    // durable: a fresh service sees the same state
+    assert.equal(moved.history[0]!.note, "82% match");
     const svc2 = await makeService(root);
     const refetched = await svc2.getApplication(app.id);
     assert.equal(refetched.status, "matched");
@@ -100,7 +135,7 @@ test("move rejects illegal transitions without persisting anything", async () =>
     const svc = await makeService(root);
     const job = await svc.addJob(JOB_INPUT);
     const app = await svc.startApplication(job.id);
-    await assert.rejects(() => svc.move(app.id, "offer"), (err) => err.name === "DomainError");
+    await assert.rejects(() => svc.move(app.id, "offer"), (err: unknown) => (err as Error).name === "DomainError");
     const svc2 = await makeService(root);
     const refetched = await svc2.getApplication(app.id);
     assert.equal(refetched.status, "discovered");
@@ -127,8 +162,11 @@ test("attachArtifact validates kind and unknown applications", async () => {
     const job = await svc.addJob(JOB_INPUT);
     const app = await svc.startApplication(job.id);
     await svc.attachArtifact(app.id, "coverLetter", "applications/x/cover-letter.md");
-    await assert.rejects(() => svc.attachArtifact(app.id, "video", "x.mp4"), /unknown artifact kind/i);
-    await assert.rejects(() => svc.attachArtifact("app-none", "resume", "r.md"), (err) => err.code === "NOT_FOUND");
+    await assert.rejects(() => svc.attachArtifact(app.id, "video" as never, "x.mp4"), /artifact kind/i);
+    await assert.rejects(
+      () => svc.attachArtifact("app-none", "resume", "r.md"),
+      (err: unknown) => (err as { code?: string }).code === "NOT_FOUND"
+    );
   });
 });
 
@@ -154,9 +192,9 @@ test("pipeline groups applications by status with job details joined", async () 
     const board = await svc.pipeline();
     assert.equal(board.discovered.length, 1);
     assert.equal(board.matched.length, 1);
-    assert.equal(board.discovered[0].id, appA.id);
-    assert.equal(board.discovered[0].company, "Acme Corp");
-    assert.equal(board.matched[0].title, "Staff SRE");
+    assert.equal(board.discovered[0]!.id, appA.id);
+    assert.equal(board.discovered[0]!.company, "Acme Corp");
+    assert.equal(board.matched[0]!.title, "Staff SRE");
   });
 });
 
@@ -165,10 +203,9 @@ test("listApplications filters by status", async () => {
     const svc = await makeService(root);
     const job = await svc.addJob(JOB_INPUT);
     const a = await svc.startApplication(job.id);
-    await svc.startApplication(job.id, {}).catch(() => {});
     await svc.move(a.id, "closed");
     const closed = await svc.listApplications({ status: "closed" });
     assert.equal(closed.length, 1);
-    assert.equal(closed[0].status, "closed");
+    assert.equal(closed[0]!.status, "closed");
   });
 });

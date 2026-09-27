@@ -1,33 +1,57 @@
-import { termCounts, topTerms } from "./terms.js";
+import { termCounts, topTerms } from "./terms.ts";
+import type { DossierHit, DossierIndex } from "./dossier.ts";
+
+/** Anything that can search a dossier index (structural: DossierIndexer fits). */
+export interface DossierSearcher {
+  search(index: Pick<DossierIndex, "files" | "keywords">, query: string): DossierHit[];
+}
 
 /** JD terms considered for coverage (most frequent first). */
 const JD_TERM_LIMIT = 40;
 
-const GRADES = [
+export type Grade = "strong" | "good" | "fair" | "stretch";
+
+const GRADES: { min: number; grade: Grade }[] = [
   { min: 75, grade: "strong" },
   { min: 55, grade: "good" },
   { min: 35, grade: "fair" },
   { min: 0, grade: "stretch" },
 ];
 
-export function grade(score) {
-  return GRADES.find((g) => score >= g.min).grade;
+export function grade(score: number): Grade {
+  return GRADES.find((g) => score >= g.min)!.grade;
+}
+
+export interface MatchedTerm {
+  term: string;
+  count: number;
+}
+
+export interface MatchReport {
+  score: number;
+  grade: Grade;
+  matched: MatchedTerm[];
+  missing: string[];
+  coverage: number;
+  at: string;
+  suggestions?: DossierHit[];
 }
 
 /**
  * Quantify how well the dossier covers a job description.
- *
- * @returns {{score:number, grade:string, matched:Array<{term,count}>,
- *            missing:string[], coverage:number, at:string, suggestions?:Array}}
- *          `suggestions` (best dossier docs to tailor from) is included when
- *          `opts.indexer` is provided.
+ * When `opts.indexer` is given, also suggests the best dossier documents
+ * to tailor from.
  */
-export function scoreMatch(jobDescription, dossierIndex, { indexer = null, now = new Date().toISOString() } = {}) {
+export function scoreMatch(
+  jobDescription: string,
+  dossierIndex: Pick<DossierIndex, "files" | "keywords">,
+  { indexer = null, now = new Date().toISOString() }: { indexer?: DossierSearcher | null; now?: string } = {}
+): MatchReport {
   const jdTerms = topTerms(termCounts(jobDescription), { limit: JD_TERM_LIMIT });
   const dossierTerms = new Set((dossierIndex.keywords ?? []).map((k) => k.term));
 
-  const matched = [];
-  const missing = [];
+  const matched: MatchedTerm[] = [];
+  const missing: string[] = [];
   let weightTotal = 0;
   let weightMatched = 0;
   for (const { term, count } of jdTerms) {
@@ -46,7 +70,7 @@ export function scoreMatch(jobDescription, dossierIndex, { indexer = null, now =
   const coverage = weightTotal === 0 ? 0 : weightMatched / weightTotal;
   const score = Math.round(coverage * 100);
 
-  const report = { score, grade: grade(score), matched, missing, coverage: Math.round(coverage * 1000) / 1000, at: now };
+  const report: MatchReport = { score, grade: grade(score), matched, missing, coverage: Math.round(coverage * 1000) / 1000, at: now };
   if (indexer) {
     report.suggestions = indexer
       .search(dossierIndex, jdTerms.map((t) => t.term).join(" "))

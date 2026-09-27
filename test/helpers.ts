@@ -2,12 +2,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export async function makeTmpDir(prefix = "axa-test-") {
-  const dir = await mkdtemp(join(tmpdir(), prefix));
-  return dir;
+export async function makeTmpDir(prefix = "axa-test-"): Promise<string> {
+  return mkdtemp(join(tmpdir(), prefix));
 }
 
-export async function withTmpDir(fn, prefix) {
+export async function withTmpDir<T>(fn: (dir: string) => Promise<T>, prefix?: string): Promise<T> {
   const dir = await makeTmpDir(prefix);
   try {
     return await fn(dir);

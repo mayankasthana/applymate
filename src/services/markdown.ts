@@ -4,11 +4,10 @@
  * Escape-first by construction: the source is HTML-escaped before any
  * markup is generated, so raw HTML in resumes can never execute. Supported
  * subset: headings, paragraphs, bold/italic/inline-code, http(s) links,
- * single-level lists, code fences, hr, blockquote. Deliberately not a full
- * CommonMark engine — no dependencies, no foot-guns.
+ * single-level lists, code fences, hr, blockquote.
  */
 
-export function escapeHtml(text) {
+export function escapeHtml(text: unknown): string {
   return String(text)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -17,26 +16,26 @@ export function escapeHtml(text) {
     .replaceAll("'", "&#39;");
 }
 
-const INLINE_RULES = [
-  [/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, text, url) => `<a href="${url}">${text}</a>`],
-  [/\*\*([^*]+)\*\*/g, (m, t) => `<strong>${t}</strong>`],
-  [/\*([^*]+)\*/g, (m, t) => `<em>${t}</em>`],
-  [/`([^`]+)`/g, (m, t) => `<code>${t}</code>`],
+const INLINE_RULES: [RegExp, (...args: string[]) => string][] = [
+  [/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, text, url) => `<a href="${url}">${text}</a>`],
+  [/\*\*([^*]+)\*\*/g, (_m, t) => `<strong>${t}</strong>`],
+  [/\*([^*]+)\*/g, (_m, t) => `<em>${t}</em>`],
+  [/`([^`]+)`/g, (_m, t) => `<code>${t}</code>`],
 ];
 
-function inline(text) {
+function inline(text: string): string {
   let out = escapeHtml(text);
-  for (const [re, fn] of INLINE_RULES) out = out.replace(re, fn);
+  for (const [re, fn] of INLINE_RULES) out = out.replace(re, fn as never);
   return out;
 }
 
-export function renderMarkdown(markdown) {
+export function renderMarkdown(markdown: string | null | undefined): string {
   const lines = String(markdown ?? "").split(/\r?\n/);
-  const out = [];
+  const out: string[] = [];
   let i = 0;
 
   while (i < lines.length) {
-    const line = lines[i];
+    const line = lines[i]!;
 
     if (/^\s*$/.test(line)) {
       i++;
@@ -45,10 +44,10 @@ export function renderMarkdown(markdown) {
 
     // fenced code block
     if (/^```/.test(line)) {
-      const code = [];
+      const code: string[] = [];
       i++;
-      while (i < lines.length && !/^```/.test(lines[i])) {
-        code.push(lines[i]);
+      while (i < lines.length && !/^```/.test(lines[i]!)) {
+        code.push(lines[i]!);
         i++;
       }
       i++; // closing fence (or EOF)
@@ -59,8 +58,8 @@ export function renderMarkdown(markdown) {
     // heading
     const heading = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
     if (heading) {
-      const level = heading[1].length;
-      out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+      const level = heading[1]!.length;
+      out.push(`<h${level}>${inline(heading[2]!)}</h${level}>`);
       i++;
       continue;
     }
@@ -74,9 +73,9 @@ export function renderMarkdown(markdown) {
 
     // blockquote
     if (/^>\s?/.test(line)) {
-      const quote = [];
-      while (i < lines.length && /^>\s?/.test(lines[i])) {
-        quote.push(lines[i].replace(/^>\s?/, ""));
+      const quote: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i]!)) {
+        quote.push(lines[i]!.replace(/^>\s?/, ""));
         i++;
       }
       out.push(`<blockquote>${inline(quote.join(" "))}</blockquote>`);
@@ -85,9 +84,9 @@ export function renderMarkdown(markdown) {
 
     // unordered list
     if (/^\s*[-*+]\s+/.test(line)) {
-      const items = [];
-      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*[-*+]\s+/, ""));
+      const items: string[] = [];
+      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i]!)) {
+        items.push(lines[i]!.replace(/^\s*[-*+]\s+/, ""));
         i++;
       }
       out.push(`<ul>\n${items.map((t) => `<li>${inline(t)}</li>`).join("\n")}\n</ul>`);
@@ -96,9 +95,9 @@ export function renderMarkdown(markdown) {
 
     // ordered list
     if (/^\s*\d+\.\s+/.test(line)) {
-      const items = [];
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*\d+\.\s+/, ""));
+      const items: string[] = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i]!)) {
+        items.push(lines[i]!.replace(/^\s*\d+\.\s+/, ""));
         i++;
       }
       out.push(`<ol>\n${items.map((t) => `<li>${inline(t)}</li>`).join("\n")}\n</ol>`);
@@ -106,9 +105,9 @@ export function renderMarkdown(markdown) {
     }
 
     // paragraph: consume consecutive non-blank lines
-    const para = [];
-    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,6}\s|```|>|\s*[-*+]\s|\s*\d+\.\s)/.test(lines[i])) {
-      para.push(lines[i]);
+    const para: string[] = [];
+    while (i < lines.length && !/^\s*$/.test(lines[i]!) && !/^(#{1,6}\s|```|>|\s*[-*+]\s|\s*\d+\.\s)/.test(lines[i]!)) {
+      para.push(lines[i]!);
       i++;
     }
     out.push(`<p>${inline(para.join("\n"))}</p>`);
@@ -118,7 +117,7 @@ export function renderMarkdown(markdown) {
 }
 
 /** Full standalone page (used by `axa render` and the review UI). */
-export function renderDocument(markdown, { title = "Document" } = {}) {
+export function renderDocument(markdown: string, { title = "Document" }: { title?: string } = {}): string {
   return `<!doctype html>
 <html lang="en">
 <head>
