@@ -47,10 +47,12 @@ export interface AnswerFile {
   answers: Record<string, AnswerRecord>;
 }
 
-/** Keys the agent should ask about when unset — suggested, never assumed. */
+/** Keys the agent should ask about when unset — suggested, never assumed.
+ *  `candidateName` comes first: how to address the candidate (first name). */
 export const RECOMMENDED_PREFERENCE_KEYS: readonly string[] = [
+  "candidateName", // first name — the agent addresses the candidate by it
   "companyType", // e.g. "product-based" | "service-based" | "either"
-  "salaryFloor", // number, in the user's currency
+  "salaryFloor", // number, in the candidate's currency
   "workMode", // e.g. "remote" | "hybrid" | "onsite" | "any"
   "locations", // acceptable locations
   "seniority", // target level

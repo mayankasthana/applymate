@@ -59,7 +59,7 @@ export const UI_HTML = `<!doctype html>
 </head>
 <body>
 <header>
-  <h1>Aja</h1><span class="sub">job pipeline & chat — everything stays on this machine</span>
+  <h1>Aja</h1><span class="sub" id="sub">job pipeline & chat — everything stays on this machine</span>
 </header>
 <main>
   <section class="card" id="prefs">
@@ -92,6 +92,9 @@ function scoreBadge(score, grade){
 
 async function refreshPrefs(){
   const state = await jget("/api/state");
+  // keys are normalized ("candidatename"); greet the candidate by first name
+  const nameRec = (state.preferences||[]).find((p) => p.key === "candidatename");
+  if (nameRec && nameRec.value) $("#sub").textContent = String(nameRec.value) + " — job pipeline & chat — everything stays on this machine";
   const row = $("#prefsRow");
   const missing = state.missingPreferences || [];
   if (!missing.length){ row.innerHTML = '<span class="empty">all set ✓ — the agent reads these before hunting</span>'; return; }
