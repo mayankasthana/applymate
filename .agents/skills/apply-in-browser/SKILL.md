@@ -11,11 +11,11 @@ drive while you coach.
 
 1. Open the application portal for the tracked `<appId>` (see its `notes.md`
    artifact for the URL and any portal quirks).
-2. Load the form memory first: `node bin/axa.ts answers list`. For each field,
-   `node bin/axa.ts answers get "<question>"`. Fill only what is known.
+2. Load the form memory first: `node bin/applymate.ts answers list`. For each field,
+   `node bin/applymate.ts answers get "<question>"`. Fill only what is known.
 3. Never guess identity, legal, authorization, or compensation fields. For
    unknown ones, ask in chat (`chat reply`), wait for the candidate, apply the
-   answer, then persist it: `node bin/axa.ts answers set "<question>" "<answer>"`.
+   answer, then persist it: `node bin/applymate.ts answers set "<question>" "<answer>"`.
 4. **Pace yourself like the person you are acting for.** One session, one tab
    per site; let pages load and scan them before acting; move through
    multi-page flows (Next / Save & Continue) in order with natural pauses;
@@ -31,10 +31,10 @@ drive while you coach.
    candidate submits.
 8. **The moment it goes through, preserve the proof:** screenshot the
    confirmation/submit page and store it:
-   `node bin/axa.ts app evidence <appId> submit.png --kind submit-screenshot`.
+   `node bin/applymate.ts app evidence <appId> submit.png --kind submit-screenshot`.
    If a confirmation number is shown, capture it too (`--kind confirmation`)
    and note it in chat.
-9. Record the facts: `node bin/axa.ts app submitted <appId> --portal "<portal>"
+9. Record the facts: `node bin/applymate.ts app submitted <appId> --portal "<portal>"
    --confirmation "<number if any>"` — this stamps the exact submission time
    and moves the application to `submitted`.
 

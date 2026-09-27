@@ -27,7 +27,7 @@ test("init scaffolds config and workspace, idempotently", async () => {
   await withTmpDir(async (root) => {
     const first = await run(["init"], root);
     assert.equal(first.code, 0);
-    await readFile(join(root, "axa.config.json"));
+    await readFile(join(root, "applymate.config.json"));
     const second = await run(["init"], root);
     assert.equal(second.code, 0);
   });

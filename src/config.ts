@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { resolveFrom } from "./paths.ts";
 import { writeJsonAtomic } from "./fsutil.ts";
 
-export const CONFIG_FILE = "axa.config.json";
+export const CONFIG_FILE = "applymate.config.json";
 
 export interface PersistedConfig {
   /** Absolute path or ~/ path to the resume dossier directory. */
@@ -80,7 +80,7 @@ function validateLoaded(merged: PersistedConfig): void {
   }
 }
 
-/** Load `axa.config.json` merged over defaults, with derived paths attached. */
+/** Load `applymate.config.json` merged over defaults, with derived paths attached. */
 export async function loadConfig(rootDir: string): Promise<Config> {
   let stored: Record<string, unknown> = {};
   let raw: string | undefined;

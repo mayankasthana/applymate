@@ -116,7 +116,7 @@ export function renderMarkdown(markdown: string | null | undefined): string {
   return out.join("\n");
 }
 
-/** Full standalone page (used by `axa render` and the review UI). */
+/** Full standalone page (used by `applymate render` and the review UI). */
 export function renderDocument(markdown: string, { title = "Document" }: { title?: string } = {}): string {
   return `<!doctype html>
 <html lang="en">
