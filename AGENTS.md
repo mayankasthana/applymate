@@ -63,6 +63,7 @@ judgment are yours. Full reference: `docs/scripts.md`. Cheatsheet:
 | pipeline | `job add|list|show|match`, `app start|list|show|move|artifact|match`, `pipeline` |
 | chat | `chat send|reply|poll|log|serve` |
 | artifacts | `render <file.md>` (markdown → standalone HTML) |
+| browser rig | `rig spec` (answers → form-filling task spec), `rig check` (probe rig services) |
 
 Every command accepts `--json` for machine-readable output.
 
@@ -120,6 +121,11 @@ hand only when the harness has no browser tools at all.
 1. Read the candidate's form memory first: `node bin/applymate.ts answers list`, and
    `answers get "<question>"` per field. Fill what you know; **never guess
    identity, legal, or compensation fields**.
+   Fast path when speed matters: `node bin/applymate.ts rig spec` turns the stored
+   answers into a task spec for the local rig in `browser-rig/` (a small local model
+   fills the fields under deterministic guardrails — same rule as below: the final
+   Submit is the candidate's button, and `--submit` mode is only for forms the
+   candidate has explicitly approved in this session).
 2. For unknown questions, ask the candidate in chat, wait for the answer, apply
    it, and **persist it**: `node bin/applymate.ts answers set "<question>" "<answer>"`.
    Normalizing capitalization is fine; changing meaning is not.
@@ -190,6 +196,7 @@ bin/applymate.ts           the toolbelt CLI   (committed)
 src/                 TypeScript library (committed)
 test/                node:test suites   (committed)
 docs/                reference docs     (committed)
+browser-rig/         local laya form-filling rig (Python; guardrails, suites, tests)  (committed)
 workspace/           jobs, applications, chat log, profile memory  (NEVER committed)
 applymate.config.json      settings incl. dossierDir, minMatchScore      (NEVER committed)
 ```
