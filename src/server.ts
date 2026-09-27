@@ -46,6 +46,9 @@ export function runServer({ config, port, log = () => {} }: { config: Config; po
 }
 
 async function handle({ req, res, services }: { req: IncomingMessage; res: ServerResponse; services: Services }): Promise<void> {
+  if (!isTrustedHost(req.headers.host)) {
+    return sendJson(res, 403, { error: "untrusted host" });
+  }
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
   const path = url.pathname;
   const method = req.method ?? "GET";
@@ -160,6 +163,19 @@ async function fileExists(path: string): Promise<boolean> {
   return readFile(path)
     .then(() => true)
     .catch(() => false);
+}
+
+/**
+ * DNS-rebinding guard: the UI serves a single local candidate, so only
+ * loopback hostnames are ever legitimate. A browser-attacker who rebinds
+ * their domain to 127.0.0.1 arrives with a foreign Host header and is
+ * refused before any route runs.
+ */
+function isTrustedHost(hostHeader: string | string[] | undefined): boolean {
+  const host = String(hostHeader ?? "").toLowerCase().trim();
+  if (!host) return false;
+  const name = host.replace(/:\d+$/, "");
+  return name === "127.0.0.1" || name === "localhost" || name === "[::1]" || name === "::1";
 }
 
 function sendJson(res: ServerResponse, status: number, value: unknown): void {
