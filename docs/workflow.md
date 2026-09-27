@@ -16,7 +16,7 @@ agent fetches the human's queued messages by polling the CLI. HTML is the new
 markdown — tailored resumes are reviewed in the browser, not the terminal.
 
 ```
- captain ──chat──► UI (127.0.0.1) ──queue──► workspace/chat/log.jsonl
+ candidate ──chat──► UI (127.0.0.1) ──queue──► workspace/chat/log.jsonl
     │                                             ▲
     │ reviews artifacts (HTML)                    │ chat poll / reply (CLI)
     ▼                                             │
@@ -55,7 +55,7 @@ workspace/
   jobs/<jobId>/match.{json,md}   score reports
   applications/<appId>.json      pipeline state + history + artifact refs
   applications/<appId>/resume.md cover-letter.md notes.md
-  profile/preferences.json       the captain's standing decisions
+  profile/preferences.json       the candidate's standing decisions
   profile/answers.json           form-question memory (browser autofill)
   chat/log.jsonl                 the conversation queue (1 JSON message per line)
   dossier/index.json             indexed dossier (keywords, sections, kinds)
@@ -68,18 +68,18 @@ Writes are atomic (temp + rename). The chat log tolerates a torn trailing line.
 
 **Relevance gate.** `job match` scores a JD against the dossier index
 (frequency-weighted keyword coverage, 0–100, graded strong/good/fair/stretch).
-`app start` refuses below `config minMatchScore` unless forced — the captain's
+`app start` refuses below `config minMatchScore` unless forced — the candidate's
 "only relevant jobs" rule, enforced by the toolbelt rather than by memory.
 
 **Ask & remember.** Before asking, the agent searches `answers` (exact
-normalized-key match, then term-overlap ≥ 0.6). After the captain answers, it
+normalized-key match, then term-overlap ≥ 0.6). After the candidate answers, it
 persists immediately. Preferences work the same way: `prefs missing` is the
 session-start prompt; values are stored with source and timestamp, never
 hardcoded in the repo.
 
 **Browser autofill.** The harness's browser tools drive the portal; the repo
 supplies the data plane (`answers`), the guardrails (prime directives: no
-guessing identity/legal fields, no submit without the captain), and the audit
+guessing identity/legal fields, no submit without the candidate), and the audit
 trail (notes.md, status history).
 
 **Chat queue.** `workspace/chat/log.jsonl` is a single JSONL file; ids are
@@ -92,4 +92,4 @@ no daemon state to lose.
   (path traversal returns 403).
 - The markdown renderer escapes before parsing — artifacts can't inject HTML.
 - Submission is a human act. The toolbelt's status machine gates `ready` on a
-  resume artifact; only the captain says "submit".
+  resume artifact; only the candidate says "submit".

@@ -402,7 +402,7 @@ async function cmdPrefsMissing({ flags, io, rootDir }: CommandContext): Promise<
   const { profile } = await services(rootDir);
   const missing = await profile.missingPreferences();
   if (flags.json) return jsonOut(io, missing);
-  line(io, missing.length ? `ask the captain about: ${missing.join(", ")}` : "(all recommended preferences are set)");
+  line(io, missing.length ? `ask the candidate about: ${missing.join(", ")}` : "(all recommended preferences are set)");
   return 0;
 }
 
@@ -424,7 +424,7 @@ async function cmdAnswersGet({ pos, flags, io, rootDir }: CommandContext): Promi
   const record = await profile.findAnswer(question);
   if (flags.json) return jsonOut(io, record);
   if (!record) {
-    line(io, "(no stored answer — ask the captain, then: axa answers set)");
+    line(io, "(no stored answer — ask the candidate, then: axa answers set)");
     return 1;
   }
   line(io, record.answer);

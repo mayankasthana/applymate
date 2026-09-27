@@ -25,7 +25,7 @@ drafting help only; submission is always human-gated), `chatPort` (default
 | `dossier search <query...>` | Rank dossier files against free text |
 | `dossier files [--kind kind]` | List indexed files by kind |
 
-## Preferences (captain decisions — never hardcoded)
+## Preferences (candidate decisions — never hardcoded)
 
 | command | what it does |
 |---|---|
@@ -62,13 +62,13 @@ Recommended keys (suggestions only, values always yours):
 Status machine: `discovered → matched → tailoring → ready → submitted →
 interviewing → offer`; `closed` from any non-terminal; `rejected` from
 submitted/interviewing. `ready` requires a resume artifact. Nothing moves to
-`submitted` except by the captain's instruction.
+`submitted` except by the candidate's instruction.
 
 ## Chat
 
 | command | what it does |
 |---|---|
-| `chat send <text...>` | Captain sends a message (UI does this too) |
+| `chat send <text...>` | Candidate sends a message (UI does this too) |
 | `chat reply <text...>` | Agent posts a reply |
 | `chat poll [--since n] [--wait seconds]` | Fetch new *user* messages; long-polls up to `wait` |
 | `chat log [--since n]` | Full transcript |

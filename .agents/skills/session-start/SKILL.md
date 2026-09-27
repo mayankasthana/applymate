@@ -1,6 +1,6 @@
 ---
 name: session-start
-description: Boot Aja at the start of any session — check missing captain preferences, poll the chat queue, and load the pipeline state.
+description: Boot Aja at the start of any session — check missing candidate preferences, poll the chat queue, and load the pipeline state.
 ---
 
 # Session start
@@ -13,7 +13,7 @@ node bin/axa.ts chat poll --since 0 --wait 3
 node bin/axa.ts pipeline
 ```
 
-- For each missing preference key, ask the captain (one compact block) and
+- For each missing preference key, ask the candidate (one compact block) and
   store every answer: `node bin/axa.ts prefs set <key> <value> --source chat`.
   Recommended keys: `companyType` (product-based vs service-based),
   `salaryFloor`, `workMode`, `locations`, `seniority`. Never invent values.

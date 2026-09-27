@@ -179,7 +179,7 @@ test("chat send/poll/reply/log loop", async () => {
     assert.equal(msgs.length, 1);
     assert.equal(msgs[0]!.text, "Please tailor Acme next");
 
-    const reply = await run(["chat", "reply", "--", "On it, captain."], root);
+    const reply = await run(["chat", "reply", "--", "On it, right away."], root);
     assert.equal(reply.code, 0);
 
     const log = await run(["chat", "log", "--json"], root);
