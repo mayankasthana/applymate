@@ -198,6 +198,56 @@ test("pipeline groups applications by status with job details joined", async () 
   });
 });
 
+test("markSubmitted records time/portal/confirmation and moves ready -> submitted", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root);
+    const job = await svc.addJob(JOB_INPUT);
+    const app = await svc.startApplication(job.id);
+    for (const s of ["matched", "tailoring"] as const) await svc.move(app.id, s);
+    await svc.attachArtifact(app.id, "resume", "applications/x/resume.md");
+    await svc.move(app.id, "ready");
+
+    const done = await svc.markSubmitted(app.id, {
+      at: "2026-09-27T14:30:00.000Z",
+      portal: "Workday",
+      confirmation: "WD-12345",
+    });
+    assert.equal(done.status, "submitted");
+    assert.equal(done.submittedAt, "2026-09-27T14:30:00.000Z");
+    assert.equal(done.submissionPortal, "Workday");
+    assert.equal(done.submissionConfirmation, "WD-12345");
+    assert.equal(done.history.at(-1)!.to, "submitted");
+  });
+});
+
+test("markSubmitted refuses illegal jumps (discovered -> submitted) and changes nothing", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root);
+    const job = await svc.addJob(JOB_INPUT);
+    const app = await svc.startApplication(job.id);
+    await assert.rejects(() => svc.markSubmitted(app.id, { at: "t" }), (err: unknown) => (err as Error).name === "DomainError");
+    const refetched = await svc.getApplication(app.id);
+    assert.equal(refetched.submittedAt, null);
+    assert.equal(refetched.status, "discovered");
+  });
+});
+
+test("markSubmitted on an already-submitted application just updates the details", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root);
+    const job = await svc.addJob(JOB_INPUT);
+    const app = await svc.startApplication(job.id);
+    for (const s of ["matched", "tailoring"] as const) await svc.move(app.id, s);
+    await svc.attachArtifact(app.id, "resume", "applications/x/resume.md");
+    await svc.move(app.id, "ready");
+    await svc.markSubmitted(app.id, { at: "t1", portal: "Greenhouse" });
+    const again = await svc.markSubmitted(app.id, { confirmation: "GH-9", at: "t1" });
+    assert.equal(again.status, "submitted");
+    assert.equal(again.history.filter((h) => h.to === "submitted").length, 1);
+    assert.equal(again.submissionConfirmation, "GH-9");
+  });
+});
+
 test("listApplications filters by status", async () => {
   await withTmpDir(async (root) => {
     const svc = await makeService(root);

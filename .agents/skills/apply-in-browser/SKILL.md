@@ -29,6 +29,13 @@ drive while you coach.
    completed, anything odd, where you stopped.
 7. At the final Submit: stop and ask the candidate for an explicit yes. Only the
    candidate submits.
-8. After submission: `node bin/axa.ts app move <appId> submitted --note "<portal> <date>"`.
+8. **The moment it goes through, preserve the proof:** screenshot the
+   confirmation/submit page and store it:
+   `node bin/axa.ts app evidence <appId> submit.png --kind submit-screenshot`.
+   If a confirmation number is shown, capture it too (`--kind confirmation`)
+   and note it in chat.
+9. Record the facts: `node bin/axa.ts app submitted <appId> --portal "<portal>"
+   --confirmation "<number if any>"` — this stamps the exact submission time
+   and moves the application to `submitted`.
 
 $ARGUMENTS

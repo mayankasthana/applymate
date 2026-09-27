@@ -151,7 +151,34 @@ export class PipelineService {
     });
   }
 
-/** Attach a workspace-relative artifact path (resume | coverLetter | notes). */
+  /**
+   * Record the submission: exact time, portal, confirmation number. Walks the
+   * status machine to `submitted` (refuses illegal jumps); if the application
+   * is already submitted, only updates the details.
+   */
+  async markSubmitted(
+    id: string,
+    { at = new Date().toISOString(), portal = null, confirmation = null, note = null }: {
+      at?: string;
+      portal?: string | null;
+      confirmation?: string | null;
+      note?: string | null;
+    }
+  ): Promise<ApplicationRecord> {
+    const app = await this.applications.get(id);
+    let moved = app;
+    if (app.status !== "submitted") {
+      moved = Application.recordTransition(app, "submitted", { at, note });
+    }
+    return this.applications.put({
+      ...moved,
+      submittedAt: at,
+      submissionPortal: portal ?? moved.submissionPortal,
+      submissionConfirmation: confirmation ?? moved.submissionConfirmation,
+    });
+  }
+
+  /** Attach a workspace-relative artifact path (resume | coverLetter | notes). */
 async attachArtifact(id: string, kind: "resume" | "coverLetter" | "notes", relPath: string): Promise<ApplicationRecord> {
   if (!ARTIFACT_KINDS.has(kind)) {
     throw new Error(`unknown artifact kind: ${kind} (known: ${[...ARTIFACT_KINDS].join(", ")})`);

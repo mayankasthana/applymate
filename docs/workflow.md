@@ -51,10 +51,12 @@ src/
 
 ```
 workspace/
-  jobs/<jobId>.json              postings (description, match score)
+  jobs/<jobId>.json              postings (description, url, capture date, match score, evidence[])
   jobs/<jobId>/match.{json,md}   score reports
-  applications/<appId>.json      pipeline state + history + artifact refs
+  jobs/<jobId>/evidence/         proof of what the posting said (jd-screenshot, jd-snapshot)
+  applications/<appId>.json      pipeline state + history + submission facts + evidence[]
   applications/<appId>/resume.md cover-letter.md notes.md
+  applications/<appId>/evidence/ proof of the submission (submit-screenshot, confirmation)
   profile/preferences.json       the candidate's standing decisions
   profile/answers.json           form-question memory (browser autofill)
   chat/log.jsonl                 the conversation queue (1 JSON message per line)
@@ -63,6 +65,17 @@ axa.config.json                  settings (dossierDir, minMatchScore, ...)
 ```
 
 Writes are atomic (temp + rename). The chat log tolerates a torn trailing line.
+
+**Evidence trail.** Before applying, a job carries the full JD text, the
+posting URL, the capture date (`addedAt`), and file captures filed by the
+toolbelt as `workspace/jobs/<id>/evidence/<timestamp>-<kind>-<id>.<ext>` — at
+minimum a `jd-screenshot` of the posting. After submitting, the application
+carries a `submit-screenshot` of the confirmation page plus the exact
+submission time, portal and confirmation number (`app submitted`). Each
+evidence entry is structured ({kind, path, at, url, note}) and rendered as a
+viewable link on the application card in the review UI (images served
+natively). The trail answers, months later: what did the posting say, when did
+we see it, what exactly did we submit, and when.
 
 ## The loops
 
