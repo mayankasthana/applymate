@@ -236,6 +236,97 @@ export class Application {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Outreach (playbook discipline, tracked: who, when, follow-up due)
+// ---------------------------------------------------------------------------
+
+export const OUTREACH_TARGET_ROLES = ["hiring-manager", "recruiter", "referrer", "other"] as const;
+export type OutreachTargetRole = (typeof OUTREACH_TARGET_ROLES)[number];
+
+export const OUTREACH_CHANNELS = ["inmail", "connection-note", "dm", "email"] as const;
+export type OutreachChannel = (typeof OUTREACH_CHANNELS)[number];
+
+/** Playbook rule: follow up once, 4–5 days after the first message. */
+export const FOLLOW_UP_AFTER_DAYS = 4;
+
+export interface OutreachMessage {
+  id: string;
+  /** Person's name as addressed. */
+  target: string;
+  targetRole: OutreachTargetRole;
+  channel: OutreachChannel;
+  /** Playbook variant id the draft was based on (A1…F), when known. */
+  variant: string | null;
+  /** Linked application, when the outreach belongs to one. */
+  appId: string | null;
+  /** Target company (denormalized: outreach may precede an application). */
+  company: string | null;
+  note: string | null;
+  sentAt: string;
+  followUpSentAt: string | null;
+  repliedAt: string | null;
+}
+
+export interface OutreachInput {
+  id?: string;
+  target?: unknown;
+  targetRole?: unknown;
+  channel?: unknown;
+  variant?: unknown;
+  appId?: unknown;
+  company?: unknown;
+  note?: unknown;
+  sentAt?: string;
+}
+
+export class OutreachMessage {
+  static create(input: OutreachInput, { now = new Date().toISOString() } = {}): OutreachMessage {
+    const msg: OutreachMessage = {
+      id: input.id ?? makeId("out", `${str(input.target)} ${str(input.company)}`),
+      target: str(input.target),
+      targetRole: (str(input.targetRole) || "other") as OutreachTargetRole,
+      channel: str(input.channel) as OutreachChannel,
+      variant: strOr(input.variant, null),
+      appId: strOr(input.appId, null),
+      company: strOr(input.company, null),
+      note: strOr(input.note, null),
+      sentAt: input.sentAt ?? now,
+      followUpSentAt: null,
+      repliedAt: null,
+    };
+    return OutreachMessage.validate(msg);
+  }
+
+  static validate(msg: OutreachMessage): OutreachMessage {
+    if (!str(msg.target)) throw new DomainError("outreach message is missing required field: target");
+    if (!OUTREACH_TARGET_ROLES.includes(msg.targetRole)) {
+      throw new DomainError(`outreach targetRole must be one of: ${OUTREACH_TARGET_ROLES.join(", ")}`);
+    }
+    if (!OUTREACH_CHANNELS.includes(msg.channel)) {
+      throw new DomainError(`outreach channel must be one of: ${OUTREACH_CHANNELS.join(", ")}`);
+    }
+    if (!str(msg.sentAt)) throw new DomainError("outreach message is missing required field: sentAt");
+    msg.variant = strOr(msg.variant, null);
+    msg.appId = strOr(msg.appId, null);
+    msg.company = strOr(msg.company, null);
+    msg.note = strOr(msg.note, null);
+    msg.followUpSentAt = strOr(msg.followUpSentAt, null);
+    msg.repliedAt = strOr(msg.repliedAt, null);
+    return msg;
+  }
+}
+
+/** When the one allowed follow-up becomes due (sentAt + FOLLOW_UP_AFTER_DAYS). */
+export function followUpDueAt(sentAt: string): number {
+  return Date.parse(sentAt) + FOLLOW_UP_AFTER_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** Follow-up discipline: exactly one, after the window, never after a reply. */
+export function isFollowUpDue(msg: OutreachMessage, now = Date.now()): boolean {
+  if (msg.repliedAt || msg.followUpSentAt) return false;
+  return now >= followUpDueAt(msg.sentAt);
+}
+
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
