@@ -198,6 +198,26 @@ test("pipeline groups applications by status with job details joined", async () 
   });
 });
 
+test("pipeline exposes the job posting url and falls back to the job-level match score", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root);
+    const jobA = await svc.addJob({ ...JOB_INPUT, url: "https://jobs.example.com/a" });
+    const jobB = await svc.addJob({ ...JOB_INPUT, company: "Globex", title: "Staff SRE" });
+    await svc.setJobMatch(jobA.id, { score: 82 });
+    const appA = await svc.startApplication(jobA.id);
+    const appB = await svc.startApplication(jobB.id);
+    await svc.setMatch(appB.id, { score: 64 });
+    const board = await svc.pipeline();
+    assert.equal(board.discovered.length, 2);
+    const a = board.discovered.find((x) => x.id === appA.id)!;
+    assert.equal(a.jobUrl, "https://jobs.example.com/a");
+    assert.equal(a.matchScore, 82, "job-level score is the display fallback");
+    const b = board.discovered.find((x) => x.id === appB.id)!;
+    assert.equal(b.jobUrl, null);
+    assert.equal(b.matchScore, 64, "app-level score wins over the job-level fallback");
+  });
+});
+
 test("markSubmitted records time/portal/confirmation and moves ready -> submitted", async () => {
   await withTmpDir(async (root) => {
     const svc = await makeService(root);
