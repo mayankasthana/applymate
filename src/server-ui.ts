@@ -33,6 +33,8 @@ export const UI_HTML = `<!doctype html>
   .job:hover { border-color:var(--accent); }
   .job .t { font-weight:600; }
   .job .c { color:var(--muted); font-size:.85rem; }
+  .job .req { display:inline-block; margin-left:.4rem; font-size:.75rem; color:var(--accent); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:0 .45rem; }
+  .job .req:hover { border-color:var(--accent); }
   .score { float:right; font-size:.75rem; border-radius:999px; padding:.05rem .55rem; background:#edf2f7; }
   .score.strong { background:#c6f6d5; color:var(--ok); }
   .score.good { background:#feebc8; }
@@ -143,7 +145,9 @@ async function refreshBoard(){
       scoreBadge(a.matchScore) +
       refBadge(a.id) +
       '<div class="t">' + esc(a.company) + '</div>' +
-      '<div class="c">' + esc(a.title) + '</div></div>'
+      '<div class="c">' + esc(a.title) +
+      (a.jobUrl ? ' <a class="req" target="_blank" rel="noopener" href="' + esc(a.jobUrl) + '" onclick="event.stopPropagation()" title="open the requisition page">req ↗</a>' : '') +
+      '</div></div>'
     ).join("") + '</div>'
   ).join("");
   $("#board").innerHTML = html || '<div class="empty">no applications yet — ask Aja to find jobs</div>';
@@ -170,7 +174,10 @@ async function openApp(id){
     '<h3>' + esc(job.company||"?") + ' — ' + esc(job.title||"?") + '</h3>' +
     '<dl class="meta">' +
     '<dt>status</dt><dd>' + esc(app.status) + '</dd>' +
-    '<dt>match</dt><dd>' + (app.matchScore ?? "not scored") + '</dd>' +
+    '<dt>match</dt><dd>' + (app.matchScore ?? job.matchScore ?? "not scored") + '</dd>' +
+    '<dt>posting</dt><dd>' + (job.url
+      ? '<a target="_blank" rel="noopener" href="' + esc(job.url) + '">open requisition ↗</a>'
+      : '-') + '</dd>' +
     '<dt>resume source</dt><dd>' + esc(app.resumeRef || "-") + '</dd>' +
     '<dt>submitted</dt><dd>' + (app.submittedAt
       ? esc(app.submittedAt) + (app.submissionPortal ? ' via ' + esc(app.submissionPortal) : '') + (app.submissionConfirmation ? ' · conf ' + esc(app.submissionConfirmation) : '')

@@ -28,6 +28,7 @@ export interface AppSummary {
   matchScore: number | null;
   resumeRef: string | null;
   updatedAt: string;
+  jobUrl: string | null;
 }
 
 /**
@@ -204,9 +205,10 @@ async attachArtifact(id: string, kind: "resume" | "coverLetter" | "notes", relPa
         company: job?.company ?? "(missing job)",
         title: job?.title ?? "(missing job)",
         status: app.status,
-        matchScore: app.matchScore,
+        matchScore: app.matchScore ?? job?.matchScore ?? null,
         resumeRef: app.resumeRef,
         updatedAt: app.updatedAt,
+        jobUrl: job?.url ?? null,
       });
     }
     for (const status of Object.keys(board) as Status[]) {
