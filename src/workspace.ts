@@ -7,7 +7,8 @@ import { PipelineService } from "./services/pipeline.ts";
 import { ChatLog } from "./services/inbox.ts";
 import { ProfileStore } from "./services/profile.ts";
 import { EvidenceStore } from "./services/evidence.ts";
-import { Application, Job } from "./domain.ts";
+import { OutreachService } from "./services/outreach.ts";
+import { Application, Job, OutreachMessage } from "./domain.ts";
 
 /**
  * Composition root: wire concrete adapters to services from a loaded config.
@@ -24,6 +25,7 @@ export function workspacePaths(config: Config) {
     answers: join(root, "profile", "answers.json"),
     chat: join(root, "chat"),
     chatLog: join(root, "chat", "log.jsonl"),
+    outreach: join(root, "outreach"),
     dossier: join(root, "dossier"),
     dossierIndex: join(root, "dossier", "index.json"),
   };
@@ -31,7 +33,7 @@ export function workspacePaths(config: Config) {
 
 export async function ensureWorkspace(config: Config) {
   const paths = workspacePaths(config);
-  for (const dir of [paths.root, paths.jobs, paths.applications, paths.profile, paths.chat, paths.dossier]) {
+  for (const dir of [paths.root, paths.jobs, paths.applications, paths.profile, paths.chat, paths.outreach, paths.dossier]) {
     await mkdir(dir, { recursive: true });
   }
   return paths;
@@ -54,6 +56,13 @@ export function makeServices(config: Config) {
     chat: new ChatLog({ filePath: paths.chatLog }),
     profile: new ProfileStore({ dir: paths.profile }),
     evidence: new EvidenceStore({ jobs, applications, workspaceRoot: paths.root }),
+    outreach: new OutreachService({
+      messages: new JsonCollection<OutreachMessage>({
+        dir: paths.outreach,
+        entityName: "outreach message",
+        validate: (r) => OutreachMessage.validate(r),
+      }),
+    }),
   };
 }
 

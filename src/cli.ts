@@ -11,6 +11,8 @@ import { writeJsonAtomic } from "./fsutil.ts";
 import { type PrefValue } from "./services/profile.ts";
 import { buildFormSpec } from "./form-spec.ts";
 import { checkRigServices, DEFAULT_RIG_ENDPOINTS } from "./services/rig.ts";
+import { outreachState } from "./services/outreach.ts";
+import { followUpDueAt } from "./domain.ts";
 import { type Job, type Evidence } from "./domain.ts";
 
 interface Io {
@@ -508,6 +510,74 @@ async function cmdAnswersList({ flags, io, rootDir }: CommandContext): Promise<n
 }
 
 // ---------------------------------------------------------------------------
+// outreach (playbook bookkeeping: sends, the one follow-up, replies)
+// ---------------------------------------------------------------------------
+
+async function cmdOutreachLog({ flags, io, rootDir }: CommandContext): Promise<number> {
+  const usage =
+    "outreach log --target <name> --role <hiring-manager|recruiter|referrer|other> --channel <inmail|connection-note|dm|email> [--variant A1] [--app appId] [--company c] [--note n] [--at iso]";
+  if (!flags.target || !flags.role || !flags.channel) {
+    return failWith(io, usage, "--target, --role and --channel are required");
+  }
+  const { outreach } = await services(rootDir);
+  const msg = await outreach.log({
+    target: String(flags.target),
+    targetRole: String(flags.role),
+    channel: String(flags.channel),
+    variant: flags.variant !== undefined ? String(flags.variant) : undefined,
+    appId: flags.app !== undefined ? String(flags.app) : undefined,
+    company: flags.company !== undefined ? String(flags.company) : undefined,
+    note: flags.note !== undefined ? String(flags.note) : undefined,
+  }, { now: flags.at ? String(flags.at) : new Date().toISOString() });
+  if (flags.json) return jsonOut(io, msg);
+  const due = new Date(followUpDueAt(msg.sentAt)).toISOString().slice(0, 10);
+  line(io, `logged ${msg.id} — ${msg.channel} to ${msg.target} (${msg.targetRole}${msg.variant ? `, variant ${msg.variant}` : ""})`);
+  line(io, `follow-up becomes due: ${due} (send once, then: outreach followup ${msg.id})`);
+  return 0;
+}
+
+async function cmdOutreachList({ flags, io, rootDir }: CommandContext): Promise<number> {
+  const { outreach } = await services(rootDir);
+  const msgs = await outreach.list({
+    appId: flags.app !== undefined ? String(flags.app) : undefined,
+    due: Boolean(flags.due),
+    all: Boolean(flags.all),
+  });
+  if (flags.json) return jsonOut(io, msgs);
+  if (!msgs.length) line(io, flags.due ? "(no follow-ups due — check again after the 4–5 day window)" : "(no open outreach)");
+  for (const m of msgs) {
+    const state = outreachState(m);
+    const when =
+      state === "replied" ? `replied ${m.repliedAt}`
+      : state === "followed-up" ? `followed up ${m.followUpSentAt}`
+      : state === "follow-up-due" ? `FOLLOW-UP DUE (sent ${m.sentAt})`
+      : `sent ${m.sentAt}`;
+    line(io, `${m.id}  ${m.channel.padEnd(15)} to ${m.target} (${m.targetRole}${m.variant ? `, ${m.variant}` : ""})  ${when}`);
+  }
+  return 0;
+}
+
+async function cmdOutreachFollowUp({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const [id] = pos;
+  if (!id) return failWith(io, "outreach followup <id> [--at iso]", "missing outreach id");
+  const { outreach } = await services(rootDir);
+  const msg = await outreach.markFollowedUp(id, { at: flags.at ? String(flags.at) : new Date().toISOString() });
+  if (flags.json) return jsonOut(io, msg);
+  line(io, `${msg.id}: follow-up recorded at ${msg.followUpSentAt} (that was the one — stop chasing)`);
+  return 0;
+}
+
+async function cmdOutreachReplied({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const [id] = pos;
+  if (!id) return failWith(io, "outreach replied <id> [--at iso]", "missing outreach id");
+  const { outreach } = await services(rootDir);
+  const msg = await outreach.markReplied(id, { at: flags.at ? String(flags.at) : new Date().toISOString() });
+  if (flags.json) return jsonOut(io, msg);
+  line(io, `${msg.id}: reply recorded at ${msg.repliedAt}`);
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // chat
 // ---------------------------------------------------------------------------
 
@@ -653,6 +723,13 @@ function printHelp(io: Io, code = 0): number {
       "  app match <appId>               score + attach report to application",
       "  pipeline                        kanban view of all applications",
       "",
+      "outreach (message-playbook bookkeeping):",
+      "  outreach log --target n --role r --channel c [--variant v] [--app id]",
+      "                                  record a sent/staged message",
+      "  outreach list [--app id] [--due] [--all]   open threads / follow-ups due",
+      "  outreach followup <id>          record the one follow-up",
+      "  outreach replied <id>           record a reply (retires the follow-up)",
+      "",
       "chat (the human <-> agent loop):",
       "  chat send <text...>             human sends a message",
       "  chat reply <text...>            agent posts a reply",
@@ -702,6 +779,10 @@ const COMMANDS: Command[] = [
   { name: "app submitted", summary: "record submission time/portal/confirmation", run: cmdAppSubmitted },
   { name: "app match", summary: "score + attach report", run: cmdAppMatch },
   { name: "pipeline", summary: "kanban view", run: cmdPipeline },
+  { name: "outreach log", summary: "record a sent/staged outreach message", run: cmdOutreachLog },
+  { name: "outreach list", summary: "open threads / follow-ups due", run: cmdOutreachList },
+  { name: "outreach followup", summary: "record the one follow-up", run: cmdOutreachFollowUp },
+  { name: "outreach replied", summary: "record a reply", run: cmdOutreachReplied },
   { name: "chat send", summary: "user message", run: cmdChatSend },
   { name: "chat reply", summary: "agent message", run: cmdChatReply },
   { name: "chat poll", summary: "fetch user messages", run: cmdChatPoll },
