@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
-import { DossierIndexer, loadDossierIndex } from "../src/services/dossier.ts";
+import { DossierIndexer, classifyRole, loadDossierIndex } from "../src/services/dossier.ts";
 import { withTmpDir } from "./helpers.ts";
 
 async function writeDossier(root: string): Promise<string> {
@@ -109,5 +109,87 @@ test("save/load index roundtrips through workspace", async () => {
     assert.equal(loaded.files.length, 3);
     const raw = JSON.parse(await readFile(join(workspace, "dossier", "index.json"), "utf8"));
     assert.ok(raw.indexedAt);
+  });
+});
+
+test("classifyRole marks experience docs profile and prep/chat/archive docs reference", () => {
+  // profile: anything that reads like evidence of real work
+  assert.equal(classifyRole("master-resume.md"), "profile");
+  assert.equal(classifyRole("resumes/acme.md"), "profile");
+  assert.equal(classifyRole("00-employment-facts.md"), "profile");
+  assert.equal(classifyRole("01-nrt-events-family.md"), "profile");
+  assert.equal(classifyRole("17-git-go-services.md"), "profile");
+  // reference: prep, chat/email archives, raw notes, cover letters, copies of other JDs
+  assert.equal(classifyRole("interview-prep-guide.md"), "reference");
+  assert.equal(classifyRole("Confluent-coding-prep.md"), "reference");
+  assert.equal(classifyRole("prep-plan-sentinelone.md"), "reference");
+  assert.equal(classifyRole("09-chat-2026.md"), "reference");
+  assert.equal(classifyRole("14-email-archive.md"), "reference");
+  assert.equal(classifyRole("19-sublime-notes.md"), "reference");
+  assert.equal(classifyRole("sublime-notes-raw/unsaved_032.txt"), "reference");
+  assert.equal(classifyRole("cover-blurb-digitalocean-staff-ai.md"), "reference");
+  assert.equal(classifyRole("07-google-drive-findings.md"), "reference");
+  assert.equal(classifyRole("helfie-reply.md"), "reference");
+});
+
+test("index tags each file with a role and counts the split in stats", async () => {
+  await withTmpDir(async (root) => {
+    const dir = join(root, "dossier");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "master-resume.md"), "# Master\nKafka Go distributed systems.");
+    await writeFile(join(dir, "interview-prep-guide.md"), "# Prep\nPractice questions for the loop.");
+    const index = await new DossierIndexer(dir).index();
+    const byPath = new Map(index.files.map((f) => [f.path, f]));
+    assert.equal(byPath.get("master-resume.md")!.role, "profile");
+    assert.equal(byPath.get("interview-prep-guide.md")!.role, "reference");
+    assert.equal(index.stats.profileFiles, 1);
+    assert.equal(index.stats.referenceFiles, 1);
+    assert.equal(index.version, 2);
+  });
+});
+
+test("profileKeywords come from profile files only", async () => {
+  await withTmpDir(async (root) => {
+    const dir = join(root, "dossier");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "master-resume.md"), "# Master\nKafka streaming. Cobol migration long ago.");
+    await writeFile(
+      join(dir, "interview-prep-guide.md"),
+      "# Prep\nStudy hadoop, hive, flink, presto, zeal, quartz, and zendframework for the loop."
+    );
+    const index = await new DossierIndexer(dir).index();
+    const terms = index.profileKeywords.map((k) => k.term);
+    assert.ok(terms.includes("kafka"));
+    assert.ok(terms.includes("cobol"));
+    assert.ok(!terms.includes("zendframework"), `prep-only term leaked: ${terms.join(",")}`);
+    assert.ok(!terms.includes("hadoop"));
+  });
+});
+
+test("profileKeywords are not capped at 200 terms", async () => {
+  await withTmpDir(async (root) => {
+    const dir = join(root, "dossier");
+    await mkdir(dir, { recursive: true });
+    const terms = Array.from({ length: 300 }, (_, i) => `skill${i}`);
+    await writeFile(join(dir, "master-resume.md"), `# Master\n${terms.join(" ")}`);
+    const index = await new DossierIndexer(dir).index();
+    const vocab = new Set(index.profileKeywords.map((k) => k.term));
+    assert.ok(vocab.has("skill299"), "term beyond 200 dropped from profile vocabulary");
+  });
+});
+
+test("explicit globs override the heuristic role classification", async () => {
+  await withTmpDir(async (root) => {
+    const dir = join(root, "dossier");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "master-resume.md"), "# Master\nKafka.");
+    await writeFile(join(dir, "coding-prep.md"), "# Prep\nPractice drills.");
+    const forced = await new DossierIndexer(dir, { referenceGlobs: ["master-resume.md"] }).index();
+    const forcedByPath = new Map(forced.files.map((f) => [f.path, f]));
+    assert.equal(forcedByPath.get("master-resume.md")!.role, "reference");
+    const whitelist = await new DossierIndexer(dir, { profileGlobs: ["*prep*"], referenceGlobs: ["*"] }).index();
+    const whitelistByPath = new Map(whitelist.files.map((f) => [f.path, f]));
+    assert.equal(whitelistByPath.get("coding-prep.md")!.role, "profile");
+    assert.equal(whitelistByPath.get("master-resume.md")!.role, "reference");
   });
 });

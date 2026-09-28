@@ -23,7 +23,21 @@ drafting help only; submission is always human-gated), `chatPort` (default
 |---|---|
 | `dossier index [--dir path]` | Walk the dossier (md/txt), classify files (master-resume, resume, skills, background, cover-letter), extract keywords, write `workspace/dossier/index.json` |
 | `dossier search <query...>` | Rank dossier files against free text |
-| `dossier files [--kind kind]` | List indexed files by kind |
+| `dossier files [--kind kind] [--role role]` | List indexed files by kind and/or role |
+
+**Match vocabulary (profile vs reference).** Every indexed file gets a `role`:
+`profile` (resumes, work history, project docs — evidence of real experience)
+or `reference` (interview prep, chat/email archives, raw notes, cover letters
+written for other companies). `job match` scores the JD only against terms from
+profile files, and that vocabulary is effectively uncapped, so common-but-real
+terms ("systems", "scale") are never dropped the way a top-200 cap drops them.
+The heuristic classifies by path; override it per file with the config keys
+`dossierProfileGlobs` / `dossierReferenceGlobs` (glob patterns on the
+dossier-relative path, `*` wildcard; profile wins). Inspect the split with
+`dossier files --role reference`. Re-run `dossier index` after changing roles.
+Profile globs win over reference globs, so whitelist mode works: set
+`dossierReferenceGlobs` to `["*"]` and re-include only your core docs via
+`dossierProfileGlobs`.
 
 ## Preferences (candidate decisions — never hardcoded)
 

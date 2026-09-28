@@ -33,6 +33,8 @@ export interface MatchReport {
   matched: MatchedTerm[];
   missing: string[];
   coverage: number;
+  /** Which term set the score was computed against, and how big it is. */
+  vocabulary: { source: "profile" | "all"; terms: number };
   at: string;
   suggestions?: DossierHit[];
 }
@@ -48,7 +50,12 @@ export function scoreMatch(
   { indexer = null, now = new Date().toISOString() }: { indexer?: DossierSearcher | null; now?: string } = {}
 ): MatchReport {
   const jdTerms = topTerms(termCounts(jobDescription), { limit: JD_TERM_LIMIT });
-  const dossierTerms = new Set((dossierIndex.keywords ?? []).map((k) => k.term));
+  // Score against the profile-scoped vocabulary (real experience docs only,
+  // uncapped). Indexes from before this scope existed fall back to the
+  // legacy global top-term list.
+  const hasProfileVocab = "profileKeywords" in dossierIndex;
+  const vocab = (dossierIndex as DossierIndex).profileKeywords ?? dossierIndex.keywords ?? [];
+  const dossierTerms = new Set(vocab.map((k) => k.term));
 
   const matched: MatchedTerm[] = [];
   const missing: string[] = [];
@@ -70,7 +77,15 @@ export function scoreMatch(
   const coverage = weightTotal === 0 ? 0 : weightMatched / weightTotal;
   const score = Math.round(coverage * 100);
 
-  const report: MatchReport = { score, grade: grade(score), matched, missing, coverage: Math.round(coverage * 1000) / 1000, at: now };
+  const report: MatchReport = {
+    score,
+    grade: grade(score),
+    matched,
+    missing,
+    coverage: Math.round(coverage * 1000) / 1000,
+    vocabulary: { source: hasProfileVocab ? "profile" : "all", terms: vocab.length },
+    at: now,
+  };
   if (indexer) {
     report.suggestions = indexer
       .search(dossierIndex, jdTerms.map((t) => t.term).join(" "))

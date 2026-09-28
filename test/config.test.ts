@@ -53,6 +53,27 @@ test("loadConfig rejects an invalid minMatchScore", async () => {
   });
 });
 
+test("loadConfig accepts glob arrays for dossier role overrides", async () => {
+  await withTmpDir(async (root) => {
+    await writeFile(
+      join(root, "applymate.config.json"),
+      JSON.stringify({ dossierProfileGlobs: ["*family*"], dossierReferenceGlobs: ["*prep*", "chat-*"] })
+    );
+    const cfg = await loadConfig(root);
+    assert.deepEqual(cfg.dossierProfileGlobs, ["*family*"]);
+    assert.deepEqual(cfg.dossierReferenceGlobs, ["*prep*", "chat-*"]);
+  });
+});
+
+test("loadConfig rejects non-string-array glob overrides", async () => {
+  await withTmpDir(async (root) => {
+    await writeFile(join(root, "applymate.config.json"), JSON.stringify({ dossierReferenceGlobs: "*prep*" }));
+    await assert.rejects(() => loadConfig(root), ConfigError);
+    await writeFile(join(root, "applymate.config.json"), JSON.stringify({ dossierReferenceGlobs: [1, 2] }));
+    await assert.rejects(() => loadConfig(root), ConfigError);
+  });
+});
+
 test("loadConfig rejects malformed JSON with a readable error", async () => {
   await withTmpDir(async (root) => {
     await writeFile(join(root, "applymate.config.json"), "{not json");
