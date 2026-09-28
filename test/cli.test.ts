@@ -130,6 +130,40 @@ test("app start/move/list/pipeline flow", async () => {
   });
 });
 
+test("pipeline and app show surface referral/outreach status", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const jdPath = join(root, "jd.md");
+    await writeFile(jdPath, "Kafka Go");
+    const add = await run(["job", "add", "--company", "Globex", "--title", "SRE", "--file", jdPath], root);
+    const jobId = add.stdout.match(/job-[a-z0-9-]+/)![0]!;
+    const start = await run(["app", "start", jobId], root);
+    const appId = start.stdout.match(/app-[a-z0-9]+/)![0]!;
+
+    // before any outreach: the board says the role has no referral yet
+    const bare = await run(["pipeline"], root);
+    assert.match(bare.stdout, /\[no refs\]/);
+
+    await run(["outreach", "log", "--target", "Jane", "--role", "referrer", "--channel", "dm", "--app", appId], root);
+
+    const board = await run(["pipeline"], root);
+    assert.match(board.stdout, /\[refs 1\]/);
+    assert.ok(!board.stdout.includes("[no refs]"));
+
+    const show = await run(["app", "show", appId], root);
+    assert.match(show.stdout, /outreach \[referrer\] Jane · dm · awaiting-reply/);
+
+    const asJson = await run(["app", "show", appId, "--json"], root);
+    const detail = JSON.parse(asJson.stdout) as { outreach: { targetRole: string; state: string }[] };
+    assert.equal(detail.outreach.length, 1);
+    assert.equal(detail.outreach[0]!.targetRole, "referrer");
+
+    const boardJson = await run(["pipeline", "--json"], root);
+    const apps = Object.values(JSON.parse(boardJson.stdout) as Record<string, { referrals: number }[]>).flat();
+    assert.equal(apps[0]!.referrals, 1);
+  });
+});
+
 test("dossier index and search against a fixture dossier", async () => {
   await withTmpDir(async (root) => {
     await run(["init"], root);

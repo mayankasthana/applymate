@@ -68,4 +68,22 @@ export function outreachState(msg: OutreachRecord, now = Date.now()): OutreachSt
   return isFollowUpDue(msg, now) ? "follow-up-due" : "awaiting-reply";
 }
 
+/** An outreach record joined with its derived display state (for UI/CLI views). */
+export interface OutreachView extends OutreachRecord {
+  state: OutreachState;
+}
+
+export function withState(msg: OutreachRecord, now = Date.now()): OutreachView {
+  return { ...msg, state: outreachState(msg, now) };
+}
+
+/** Referral sends per linked application: appId → count of referrer messages. */
+export function referralCounts(msgs: OutreachRecord[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const m of msgs) {
+    if (m.appId && m.targetRole === "referrer") counts.set(m.appId, (counts.get(m.appId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 const bySentAtDesc = (a: OutreachRecord, b: OutreachRecord): number => String(b.sentAt).localeCompare(String(a.sentAt));

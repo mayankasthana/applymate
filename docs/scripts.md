@@ -68,13 +68,13 @@ Recommended keys (suggestions only, values always yours):
 | `job list` / `job show <id>` | List / inspect (show prints the evidence list) |
 | `job match <jobId>` | Score the JD against the dossier; persists score + writes `workspace/jobs/<id>/match.{json,md}` |
 | `app start <jobId> [--resume path] [--force]` | Open an application. Relevance gate: refuses below `minMatchScore` unless `--force` |
-| `app list [--status s]` / `app show <id>` | List / inspect with history, submission details and evidence |
+| `app list [--status s]` / `app show <id>` | List / inspect with history, submission details, evidence and the outreach/referral trail |
 | `app move <id> <status> [--note n]` | Walk the status machine (illegal skips rejected) |
 | `app artifact <id> <resume\|coverLetter\|notes> <path>` | Register a workspace-relative artifact |
 | `app evidence <appId> <file> --kind submit-screenshot [--note n] [--at iso]` | Store submit-page screenshots and confirmations |
 | `app submitted <appId> [--portal p] [--confirmation c] [--at iso]` | Stamp exact submission time + portal + confirmation; walks the machine to `submitted` |
 | `app match <appId>` | Score + attach report to the application |
-| `pipeline` | Kanban view across all statuses |
+| `pipeline` | Kanban view across all statuses, with a `[refs N]` / `[no refs]` referral marker per application (`--json` adds a `referrals` count) |
 
 **Evidence kinds** are slugs; conventions: `jd-screenshot`, `jd-snapshot`
 (saved page/PDF) on jobs; `submit-screenshot`, `confirmation` on applications.
@@ -101,7 +101,12 @@ single follow-up the playbook allows (4–5 days after each send), and replies.
 | `outreach followup <id> [--at iso]` | Record the one follow-up — refuses a second, and refuses after a reply |
 | `outreach replied <id> [--at iso]` | Record a reply (retires the follow-up) |
 
-Records live in `workspace/outreach/<id>.json` (personal, gitignored).
+Records live in `workspace/outreach/<id>.json` (personal, gitignored). Messages
+logged with `--app <appId>` count as that application's referral trail: the
+review UI shows a `refs N` / `no ref` badge on every board card plus the full
+outreach list on the application sheet, and `pipeline` / `app show` carry the
+same status — so at any moment it is clear which roles have a referral in
+motion and which do not.
 
 ## Chat
 

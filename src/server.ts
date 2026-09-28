@@ -8,6 +8,7 @@ import { UI_HTML } from "./server-ui.ts";
 import { renderDocument, escapeHtml } from "./services/markdown.ts";
 import { loadDossierIndex } from "./services/dossier.ts";
 import { scoreMatch } from "./services/matcher.ts";
+import { withState } from "./services/outreach.ts";
 
 const MAX_BODY_BYTES = 1_000_000;
 const RENDERABLE = /\.(md|markdown|txt)$/i;
@@ -58,15 +59,17 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
   }
 
   if (method === "GET" && path === "/api/state") {
-    const [pipeline, prefs, missing] = await Promise.all([
+    const [pipeline, prefs, missing, outreach] = await Promise.all([
       services.pipeline.pipeline(),
       services.profile.preferences(),
       services.profile.missingPreferences(),
+      services.outreach.list({ all: true }),
     ]);
     return sendJson(res, 200, {
       pipeline,
       preferences: prefs,
       missingPreferences: missing,
+      outreach: outreach.map((m) => withState(m)),
       latestMessageId: await services.chat.latestId(),
       dossierIndexed: await fileExists(services.paths.dossierIndex),
     });
@@ -93,8 +96,11 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
   const appMatch = path.match(/^\/api\/application\/([a-z0-9._-]+)$/i);
   if (method === "GET" && appMatch) {
     const app = await services.pipeline.getApplication(appMatch[1]!);
-    const job = await services.pipeline.getJob(app.jobId).catch(() => null);
-    return sendJson(res, 200, { ...app, job });
+    const [job, outreach] = await Promise.all([
+      services.pipeline.getJob(app.jobId).catch(() => null),
+      services.outreach.list({ appId: app.id, all: true }),
+    ]);
+    return sendJson(res, 200, { ...app, job, outreach: outreach.map((m) => withState(m)) });
   }
 
   if (method === "GET" && path === "/api/artifact") {

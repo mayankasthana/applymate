@@ -37,6 +37,13 @@ export const UI_HTML = `<!doctype html>
   .score.strong { background:#c6f6d5; color:var(--ok); }
   .score.good { background:#feebc8; }
   .score.fair, .score.stretch { background:#fed7d7; }
+  .ref { float:right; margin-right:.3rem; font-size:.75rem; border-radius:999px; padding:.05rem .55rem; background:#edf2f7; color:var(--muted); }
+  .ref.yes { background:#c6f6d5; color:var(--ok); }
+  .ref.no { background:#feebc8; color:#7b341e; }
+  .ostate.follow-up-due { color:#c05621; font-weight:600; }
+  .ostate.replied { color:var(--ok); }
+  ul.outreach { margin:.3rem 0; padding-left:1.1rem; }
+  ul.outreach li { margin:.2rem 0; }
   #chatlog { height:60vh; overflow-y:auto; padding:.8rem; display:flex; flex-direction:column; gap:.45rem; }
   .bubble { max-width:88%; padding:.5rem .75rem; border-radius:12px; white-space:pre-wrap; word-wrap:break-word; }
   .bubble.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
@@ -110,14 +117,31 @@ async function refreshPrefs(){
 }
 
 const STATUS_ORDER = ["discovered","matched","tailoring","ready","submitted","interviewing","offer","rejected","closed"];
+// appId → outreach messages linked to that application (from /api/state)
+let outreachByApp = {};
+
+function refBadge(appId){
+  const msgs = outreachByApp[appId] || [];
+  const refs = msgs.filter((m) => m.targetRole === "referrer");
+  if (refs.length) return '<span class="ref yes" title="referral outreach sent to ' + refs.length + ' people">refs ' + refs.length + '</span>';
+  if (msgs.length) return '<span class="ref no" title="outreach sent, but no referral yet">no ref</span>';
+  return '<span class="ref" title="no outreach logged for this application yet">no ref</span>';
+}
+
 async function refreshBoard(){
   const state = await jget("/api/state");
+  outreachByApp = {};
+  for (const m of (state.outreach||[])) {
+    if (!m.appId) continue;
+    (outreachByApp[m.appId] = outreachByApp[m.appId] || []).push(m);
+  }
   const board = state.pipeline || {};
   const html = STATUS_ORDER.filter((s) => (board[s]||[]).length).map((s) =>
     '<div class="status"><h3>' + esc(s) + '</h3>' +
     board[s].map((a) =>
       '<div class="job" data-id="' + esc(a.id) + '" data-job="' + esc(a.jobId) + '" onclick="openApp(\\'' + esc(a.id) + '\\')">' +
       scoreBadge(a.matchScore) +
+      refBadge(a.id) +
       '<div class="t">' + esc(a.company) + '</div>' +
       '<div class="c">' + esc(a.title) + '</div></div>'
     ).join("") + '</div>'
@@ -133,6 +157,15 @@ async function openApp(id){
   const evidence = (app.evidence||[]).map((e) =>
     '<a class="artifact btn" style="background:#dd6b20" target="_blank" href="/api/artifact?path=' + encodeURIComponent(e.path) + '" title="' + esc(e.at) + '">' + esc(e.kind) + '</a>'
   ).join("");
+  const outreach = (app.outreach||[]);
+  const outreachHtml = outreach.length
+    ? '<h4>Outreach</h4><ul class="outreach">' + outreach.map((m) =>
+        '<li><strong>' + esc(m.target) + '</strong> · ' + esc(m.targetRole) + ' · ' + esc(m.channel) +
+        ' · <span class="ostate ' + esc(m.state) + '">' + esc(m.state) + '</span>' +
+        ' · sent ' + esc(String(m.sentAt).slice(0, 10)) +
+        (m.note ? ' — ' + esc(m.note) : '') + '</li>'
+      ).join("") + '</ul>'
+    : '<p class="empty">no outreach or referral logged for this application yet</p>';
   $("#sheetBody").innerHTML =
     '<h3>' + esc(job.company||"?") + ' — ' + esc(job.title||"?") + '</h3>' +
     '<dl class="meta">' +
@@ -144,6 +177,7 @@ async function openApp(id){
       : 'not yet') + '</dd>' +
     '</dl>' +
     (evidence ? '<h4>Evidence</h4>' + evidence : '') +
+    outreachHtml +
     (arts ? '<h4>Artifacts</h4>' + arts : '<p class="empty">no artifacts yet</p>') +
     '<h4>Job description</h4><pre style="white-space:pre-wrap">' + esc(job.description||"") + '</pre>';
   $("#overlay").classList.add("open");
