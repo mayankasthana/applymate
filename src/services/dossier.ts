@@ -4,16 +4,23 @@ import { join, relative, sep } from "node:path";
 import { termCounts, topTerms, extractTerms } from "./terms.ts";
 import { writeJsonAtomic } from "../fsutil.ts";
 
-const INDEX_VERSION = 1;
+const INDEX_VERSION = 2;
 const TEXT_EXTENSIONS = /\.(md|markdown|txt)$/i;
 const FILE_KEYWORD_LIMIT = 30;
 const GLOBAL_KEYWORD_LIMIT = 200;
+// Effectively uncapped: the match vocabulary must not drop real experience
+// terms just because the corpus is large (a 200-term cap is what made scores
+// collapse to single digits on real dossiers). The bound only keeps the
+// index JSON sane for pathological inputs.
+const PROFILE_KEYWORD_LIMIT = 50_000;
 
 export type DossierKind = "master-resume" | "cover-letter" | "skills" | "background" | "resume" | "other";
+export type DossierRole = "profile" | "reference";
 
 export interface DossierFile {
   path: string;
   kind: DossierKind;
+  role: DossierRole;
   title: string;
   sections: string[];
   words: number;
@@ -26,8 +33,11 @@ export interface DossierIndex {
   indexedAt: string;
   root: string;
   files: DossierFile[];
+  /** Legacy global top-term list (all files). Kept for display/back-compat. */
   keywords: { term: string; count: number; files: number }[];
-  stats: { files: number; words: number };
+  /** Match vocabulary: terms from profile files only, effectively uncapped. */
+  profileKeywords: { term: string; count: number }[];
+  stats: { files: number; words: number; profileFiles: number; referenceFiles: number };
 }
 
 export interface DossierHit {
@@ -36,6 +46,13 @@ export interface DossierHit {
   title: string;
   score: number;
   matched: string[];
+}
+
+export interface DossierIndexerOptions {
+  /** Glob patterns (matched against the dossier-relative path, `*` = any run of characters) that force files into the profile match vocabulary. */
+  profileGlobs?: string[];
+  /** Glob patterns that force files out of it; wins over profileGlobs. */
+  referenceGlobs?: string[];
 }
 
 /** Classify a dossier file by its path: what kind of document is it? */
@@ -49,15 +66,49 @@ export function classify(relPath: string): DossierKind {
   return "other";
 }
 
+const REFERENCE_PATH_RE =
+  /(interview|prep\b|call[-_ ]?pre|chat|email|e-?mail|archive|notes|findings|cover|readme|reply|recruit|job[-_ ]?descript|\bjd[-_. ]|offer)/;
+
+/**
+ * Decide whether a file feeds the match vocabulary.
+ * "profile" = evidence of the candidate's real experience (resumes, work
+ * history, project docs). "reference" = context worth searching but not
+ * evidence (interview prep, chat/email archives, raw notes, cover letters
+ * written for other companies). Explicit profile globs win (whitelist mode:
+ * force everything out with `referenceGlobs: ["*"]`, then re-include core
+ * docs), then reference globs, then the heuristic — which defaults to profile
+ * so real experience docs are never dropped.
+ */
+export function classifyRole(
+  relPath: string,
+  profileGlobs: string[] = [],
+  referenceGlobs: string[] = []
+): DossierRole {
+  if (profileGlobs.some((g) => globToRegExp(g).test(relPath))) return "profile";
+  if (referenceGlobs.some((g) => globToRegExp(g).test(relPath))) return "reference";
+  if (classify(relPath) === "cover-letter") return "reference";
+  if (REFERENCE_PATH_RE.test(relPath.toLowerCase())) return "reference";
+  return "profile";
+}
+
+function globToRegExp(glob: string): RegExp {
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return new RegExp(`^${escaped}$`, "i");
+}
+
 /**
  * Service: scans a resume dossier directory into a searchable profile index
  * (titles, sections, per-file keywords) and answers retrieval queries.
  */
 export class DossierIndexer {
   readonly dossierDir: string;
+  readonly #profileGlobs: string[];
+  readonly #referenceGlobs: string[];
 
-  constructor(dossierDir: string) {
+  constructor(dossierDir: string, { profileGlobs = [], referenceGlobs = [] }: DossierIndexerOptions = {}) {
     this.dossierDir = dossierDir;
+    this.#profileGlobs = profileGlobs;
+    this.#referenceGlobs = referenceGlobs;
   }
 
   /** Walk the dossier and build the profile index. */
@@ -65,6 +116,7 @@ export class DossierIndexer {
     const paths = await this.#walk(this.dossierDir);
     const files: DossierFile[] = [];
     const globalCounts = new Map<string, number>();
+    const profileCounts = new Map<string, number>();
     for (const abs of paths) {
       const rel = relative(this.dossierDir, abs).split(sep).join("/");
       const content = await readFile(abs, "utf8");
@@ -72,9 +124,16 @@ export class DossierIndexer {
       for (const [term, count] of counts) {
         globalCounts.set(term, (globalCounts.get(term) ?? 0) + count);
       }
+      const role = classifyRole(rel, this.#profileGlobs, this.#referenceGlobs);
+      if (role === "profile") {
+        for (const [term, count] of counts) {
+          profileCounts.set(term, (profileCounts.get(term) ?? 0) + count);
+        }
+      }
       files.push({
         path: rel,
         kind: classify(rel),
+        role,
         title: firstHeading(content) ?? rel.replace(/\.[^.]+$/, ""),
         sections: markdownHeadings(content),
         words: content.split(/\s+/).filter(Boolean).length,
@@ -87,15 +146,19 @@ export class DossierIndexer {
       ...k,
       files: fileCountFor(k.term),
     }));
+    const profileFiles = files.filter((f) => f.role === "profile").length;
     return {
       version: INDEX_VERSION,
       indexedAt: now,
       root: this.dossierDir,
       files,
       keywords,
+      profileKeywords: topTerms(profileCounts, { limit: PROFILE_KEYWORD_LIMIT }),
       stats: {
         files: files.length,
         words: files.reduce((sum, f) => sum + f.words, 0),
+        profileFiles,
+        referenceFiles: files.length - profileFiles,
       },
     };
   }

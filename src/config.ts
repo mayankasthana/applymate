@@ -18,6 +18,10 @@ export interface PersistedConfig {
   chatPort: number;
   /** Applications below this dossier-match score are refused unless forced. */
   minMatchScore: number;
+  /** Glob patterns forcing dossier files into the match vocabulary (evidence of real experience); wins over reference globs. */
+  dossierProfileGlobs: string[];
+  /** Glob patterns keeping dossier files out of the match vocabulary (prep, archives). */
+  dossierReferenceGlobs: string[];
 }
 
 /** Loaded config plus derived absolute paths (prefixed `_`, never persisted). */
@@ -34,6 +38,8 @@ export const DEFAULT_CONFIG: Readonly<PersistedConfig> = Object.freeze({
   autonomy: "draft",
   chatPort: 4388,
   minMatchScore: 60,
+  dossierProfileGlobs: [],
+  dossierReferenceGlobs: [],
 });
 
 export class ConfigError extends Error {
@@ -71,10 +77,23 @@ function validate(patch: Record<string, unknown>): void {
   if (dossier !== null && dossier !== undefined && typeof dossier !== "string") {
     throw new ConfigError("dossierDir must be a string path or null");
   }
+  for (const key of ["dossierProfileGlobs", "dossierReferenceGlobs"] as const) {
+    const globs = patch[key];
+    if (globs !== undefined && (!Array.isArray(globs) || globs.some((g) => typeof g !== "string"))) {
+      throw new ConfigError(`${key} must be an array of glob strings`);
+    }
+  }
 }
 
 function validateLoaded(merged: PersistedConfig): void {
-  validate({ autonomy: merged.autonomy, chatPort: merged.chatPort, dossierDir: merged.dossierDir, minMatchScore: merged.minMatchScore });
+  validate({
+    autonomy: merged.autonomy,
+    chatPort: merged.chatPort,
+    dossierDir: merged.dossierDir,
+    minMatchScore: merged.minMatchScore,
+    dossierProfileGlobs: merged.dossierProfileGlobs,
+    dossierReferenceGlobs: merged.dossierReferenceGlobs,
+  });
   if (typeof merged.workspaceDir !== "string" || merged.workspaceDir.length === 0) {
     throw new ConfigError("workspaceDir must be a non-empty string");
   }

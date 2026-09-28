@@ -137,11 +137,18 @@ async function cmdDossierIndex({ pos, flags, io, rootDir }: CommandContext): Pro
     return failWith(io, "dossier index [--dir path]", "no dossier configured: set config dossierDir or pass --dir");
   }
   const paths = workspacePaths(config);
-  const indexer = new DossierIndexer(dossierDir);
+  const indexer = new DossierIndexer(dossierDir, {
+    profileGlobs: config.dossierProfileGlobs,
+    referenceGlobs: config.dossierReferenceGlobs,
+  });
   const index = await indexer.index();
   await indexer.save(index, paths.dossierIndex);
   if (flags.json) return jsonOut(io, { root: index.root, stats: index.stats, file: paths.dossierIndex });
-  line(io, `indexed ${index.stats.files} files, ${index.stats.words} words -> ${paths.dossierIndex}`);
+  line(
+    io,
+    `indexed ${index.stats.files} files (${index.stats.profileFiles} profile, ${index.stats.referenceFiles} reference), ${index.stats.words} words -> ${paths.dossierIndex}`
+  );
+  line(io, `match vocabulary: ${index.profileKeywords.length} terms from profile files (see: dossier files --role reference)`);
   return 0;
 }
 
@@ -162,8 +169,9 @@ async function cmdDossierFiles({ flags, io, rootDir }: CommandContext): Promise<
   const index = await loadDossierIndex(workspacePaths(config).dossierIndex);
   let files = index.files;
   if (flags.kind) files = files.filter((f) => f.kind === flags.kind);
+  if (flags.role) files = files.filter((f) => f.role === flags.role);
   if (flags.json) return jsonOut(io, files);
-  for (const f of files) line(io, `[${f.kind}] ${f.path} — ${f.title} (${f.words} words)`);
+  for (const f of files) line(io, `[${f.kind}/${f.role}] ${f.path} — ${f.title} (${f.words} words)`);
   line(io, `${files.length} file(s)`);
   return 0;
 }
@@ -395,6 +403,11 @@ async function matchJobAgainstDossier(svc: Services, jobId: string): Promise<{ r
 
 function renderMatchText(report: MatchReport): string {
   const lines = [`match score: ${report.score}/100 (${report.grade})`];
+  lines.push(
+    report.vocabulary.source === "profile"
+      ? `vocabulary: ${report.vocabulary.terms} terms from profile files`
+      : `vocabulary: ${report.vocabulary.terms} terms (legacy full-dossier set — run: applymate dossier index)`
+  );
   if (report.matched.length) lines.push(`covered: ${report.matched.map((m) => m.term).join(", ")}`);
   if (report.missing.length) lines.push(`missing: ${report.missing.join(", ")}`);
   for (const s of report.suggestions ?? []) lines.push(`suggest base resume: ${s.path} (relevance ${s.score})`);
@@ -613,9 +626,9 @@ function printHelp(io: Io, code = 0): number {
       "  config get [key] | set <k> <v>  read/update settings",
       "",
       "dossier:",
-      "  dossier index [--dir path]        index the resume dossier",
+      "  dossier index [--dir path]        index the resume dossier (profile vs reference roles)",
       "  dossier search <query...>         find dossier files by keywords",
-      "  dossier files [--kind kind]       list indexed files",
+      "  dossier files [--kind kind] [--role role]  list indexed files",
       "",
       "preferences (your decisions — never hardcoded):",
       "  prefs list | prefs get <key> | prefs set <key> <value>",
