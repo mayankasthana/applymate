@@ -132,6 +132,30 @@ test("application endpoint joins job details", async () => {
   });
 });
 
+test("state and application endpoints surface outreach/referral status", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const job = await services.pipeline.addJob({ company: "Acme", title: "SRE", description: "Kafka" });
+    const app = await services.pipeline.startApplication(job.id);
+    await services.outreach.log({ target: "Jane Referrer", targetRole: "referrer", channel: "dm", appId: app.id, company: "Acme" });
+    await services.outreach.log({ target: "Stray Note", targetRole: "other", channel: "email" });
+
+    const state = (await (await fetch(base + "/api/state")).json()) as {
+      outreach: { appId: string | null; targetRole: string; state: string }[];
+    };
+    assert.equal(state.outreach.length, 2);
+    const linked = state.outreach.find((m) => m.appId === app.id);
+    assert.equal(linked!.targetRole, "referrer");
+    assert.equal(linked!.state, "awaiting-reply");
+
+    const detail = (await (await fetch(base + `/api/application/${app.id}`)).json()) as {
+      outreach: { target: string; state: string }[];
+    };
+    assert.equal(detail.outreach.length, 1);
+    assert.equal(detail.outreach[0]!.target, "Jane Referrer");
+  });
+});
+
 test("artifact endpoint renders workspace markdown and blocks path escape", async () => {
   await withServer(async ({ base, config }) => {
     const services = makeServices(config);

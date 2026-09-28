@@ -11,7 +11,7 @@ import { writeJsonAtomic } from "./fsutil.ts";
 import { type PrefValue } from "./services/profile.ts";
 import { buildFormSpec } from "./form-spec.ts";
 import { checkRigServices, DEFAULT_RIG_ENDPOINTS } from "./services/rig.ts";
-import { outreachState } from "./services/outreach.ts";
+import { outreachState, withState, referralCounts } from "./services/outreach.ts";
 import { followUpDueAt } from "./domain.ts";
 import { type Job, type Evidence } from "./domain.ts";
 
@@ -282,8 +282,11 @@ async function cmdAppShow({ pos, flags, io, rootDir }: CommandContext): Promise<
   if (!id) return failWith(io, "app show <appId>", "missing application id");
   const svc = await services(rootDir);
   const app = await svc.pipeline.getApplication(id);
-  const job = await svc.pipeline.getJob(app.jobId).catch(() => null);
-  if (flags.json) return jsonOut(io, { ...app, job });
+  const [job, outreach] = await Promise.all([
+    svc.pipeline.getJob(app.jobId).catch(() => null),
+    svc.outreach.list({ appId: app.id, all: true }),
+  ]);
+  if (flags.json) return jsonOut(io, { ...app, job, outreach: outreach.map((m) => withState(m)) });
   line(io, `${app.id}  status=${app.status}  job=${app.jobId}`);
   if (job) line(io, `${job.company} — ${job.title}`);
   line(io, `resume from dossier: ${app.resumeRef ?? "(none chosen)"}`);
@@ -293,6 +296,13 @@ async function cmdAppShow({ pos, flags, io, rootDir }: CommandContext): Promise<
   }
   for (const [kind, p] of Object.entries(app.artifacts)) line(io, `artifact ${kind}: ${p ?? "-"}`);
   for (const e of app.evidence) line(io, `evidence [${e.kind}] ${e.path} at ${e.at}`);
+  if (outreach.length) {
+    for (const m of outreach) {
+      line(io, `outreach [${m.targetRole}] ${m.target} · ${m.channel} · ${outreachState(m)} · sent ${m.sentAt}${m.note ? ` — ${m.note}` : ""}`);
+    }
+  } else {
+    line(io, "outreach: none logged (no referral yet)");
+  }
   for (const h of app.history) line(io, `history: ${h.from} -> ${h.to}${h.note ? ` (${h.note})` : ""} at ${h.at}`);
   line(io);
   if (job) line(io, job.description);
@@ -365,15 +375,25 @@ async function cmdAppSubmitted({ pos, flags, io, rootDir }: CommandContext): Pro
 }
 
 async function cmdPipeline({ flags, io, rootDir }: CommandContext): Promise<number> {
-  const { pipeline } = await services(rootDir);
-  const board = await pipeline.pipeline();
-  if (flags.json) return jsonOut(io, board);
+  const { pipeline, outreach: outreachSvc } = await services(rootDir);
+  const [board, msgs] = await Promise.all([pipeline.pipeline(), outreachSvc.list({ all: true })]);
+  const refs = referralCounts(msgs);
+  if (flags.json) {
+    const augmented = Object.fromEntries(
+      Object.entries(board).map(([status, apps]) => [
+        status,
+        apps.map((a) => ({ ...a, referrals: refs.get(a.id) ?? 0 })),
+      ])
+    );
+    return jsonOut(io, augmented);
+  }
   let total = 0;
   for (const [status, apps] of Object.entries(board)) {
     if (!apps.length) continue;
     line(io, `## ${status}`);
     for (const a of apps) {
-      line(io, `  ${a.id}  ${a.company} — ${a.title}${a.matchScore !== null ? `  [match ${a.matchScore}]` : ""}`);
+      const n = refs.get(a.id) ?? 0;
+      line(io, `  ${a.id}  ${a.company} — ${a.title}${a.matchScore !== null ? `  [match ${a.matchScore}]` : ""}  [${n ? `refs ${n}` : "no refs"}]`);
       total++;
     }
   }
