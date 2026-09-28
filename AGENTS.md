@@ -65,6 +65,7 @@ judgment are yours. Full reference: `docs/scripts.md`. Cheatsheet:
 | pipeline | `job add|list|show|match`, `app start|list|show|move|artifact|match`, `pipeline` |
 | chat | `chat send|reply|poll|log|serve` |
 | artifacts | `render <file.md>` (markdown → standalone HTML) |
+| outreach | `outreach log|list|followup|replied` (playbook sends + the one follow-up) |
 | browser rig | `rig spec` (answers → form-filling task spec), `rig check` (probe rig services) |
 
 Every command accepts `--json` for machine-readable output.
@@ -185,13 +186,23 @@ candidate's livelihood.
    connections at the company first (direct message, no invite cost), then
    2nd-degree engineers at the right level and city; check whether the
    requisition's poster is worth messaging too.
-2. Draft a personalized note per target from the dossier. Connection notes
-   are capped at 300 characters (free accounts get only a handful of
+2. Draft with the `outreach-playbook` skill: the candidate's message formulas
+   live in `workspace/profile/outreach-playbook.md` (families A–F: hiring
+   managers, recruiters, referrers, connection notes, follow-ups, subject
+   lines). Its filled-in proof points belong to the author it was supplied
+   from — fill every bracket and every number from the dossier, `answers`,
+   and `prefs`, never from the playbook's examples. Connection notes are
+   capped at 300 characters (free accounts get only a handful of
    personalized invites per month — spend them deliberately); direct
-   messages to 1st-degree connections can be longer. Show every draft for
-   approval before sending, then record what went out in the application's
-   `notes.md`.
-3. LinkedIn sessions: the in-app browser, any debug-mode Chrome, and the
+   messages to 1st-degree connections can be longer; every message under
+   100 words with ONE ask. Show every draft for approval before sending,
+   then record what went out in the application's `notes.md`.
+3. Track sends so the follow-up rule survives the session:
+   `outreach log --target "<name>" --role <role> --channel <channel> --variant A1 [--app <appId>]`
+   on every approved send; `outreach list --due` surfaces the one follow-up
+   (4–5 days later) when it comes due; `outreach followup <id>` after sending
+   it (once), `outreach replied <id>` when an answer lands.
+4. LinkedIn sessions: the in-app browser, any debug-mode Chrome, and the
    candidate's daily browser are separate profiles with separate logins,
    and Chrome blocks DevTools debugging on default profiles. Have the
    candidate log in manually in whichever browser the agent drives; never

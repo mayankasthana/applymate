@@ -87,6 +87,22 @@ interviewing → offer`; `closed` from any non-terminal; `rejected` from
 submitted/interviewing. `ready` requires a resume artifact. Nothing moves to
 `submitted` except by the candidate's instruction.
 
+## Outreach (message-playbook bookkeeping)
+
+The drafting method lives in the `outreach-playbook` skill; the candidate's
+formula bank is `workspace/profile/outreach-playbook.md` (personal, never
+committed). The toolbelt tracks the deterministic part: what went out, the
+single follow-up the playbook allows (4–5 days after each send), and replies.
+
+| command | what it does |
+|---|---|
+| `outreach log --target n --role hiring-manager\|recruiter\|referrer\|other --channel inmail\|connection-note\|dm\|email [--variant A1] [--app appId] [--company c] [--note n] [--at iso]` | Record an approved+sent message; prints the date the follow-up becomes due |
+| `outreach list [--app id] [--due] [--all]` | Open threads, newest first; `--due` = follow-ups due now; `--all` adds replied/followed-up history |
+| `outreach followup <id> [--at iso]` | Record the one follow-up — refuses a second, and refuses after a reply |
+| `outreach replied <id> [--at iso]` | Record a reply (retires the follow-up) |
+
+Records live in `workspace/outreach/<id>.json` (personal, gitignored).
+
 ## Chat
 
 | command | what it does |
@@ -115,6 +131,6 @@ The rig itself lives in `browser-rig/` (setup, guardrails, benchmarks, tests) �
 
 ## For contributors
 
-Tests: `npm test` (node:test, 120+ tests). Types: `npm run typecheck`
+Tests: `npm test` (node:test, 160+ tests). Types: `npm run typecheck`
 (tsc --strict, no emit — TypeScript runs natively via Node 24 type-stripping;
 zero runtime dependencies). architecture notes in `docs/workflow.md`.
