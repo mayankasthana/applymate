@@ -32,6 +32,16 @@ candidateName` (ask for it if unset). Never titles or role words ("captain",
 5. **Personal data stays local.** `workspace/` and the dossier never go into
    git, logs, or third-party services (except the application forms the candidate
    approved filling).
+6. **Write like the candidate, not like a chatbot.** Every word that goes out
+   in the candidate's name — resumes, cover letters, form free-text answers,
+   LinkedIn outreach and referral notes, follow-ups, any prose a recruiter or
+   hiring manager will read — passes through the `humanizer` skill before it
+   leaves the draft stage (installed at `~/.agents/skills/humanizer/`; if the
+   harness cannot invoke skills by name, read its `SKILL.md` and apply the
+   checklist by hand). Take the voice from the candidate's own dossier prose.
+   The pass strips AI tells only; it never adds, drops, or softens a fact
+   (directive 2 still governs content). Chat with the candidate in the review
+   UI is exempt — that is conversation, not candidate-authored text.
 
 ## Boot sequence (start of every session)
 
@@ -93,8 +103,13 @@ Every command accepts `--json` for machine-readable output.
    compares the JD against the dossier index; the toolbelt refuses to open
    applications below `config minMatchScore` (default 60) — respect that; it is
    the candidate's stated relevance bar.
-5. Present a shortlist in chat: company, role, score, grade, 1-line "why", and
-   missing-skill red flags. Let the candidate pick. Only then `app start`.
+5. Put every discovered job that clears the match floor on the board
+   (`app start <jobId>` — the candidate's standing preference, prefs
+   `boardvisibility`): each lands as a `discovered` card in the review UI, and
+   the candidate discards unwanted ones with the card's ✕ button (moves the
+   application to `closed`). Present a shortlist in chat: company, role, score,
+   grade, 1-line "why", and missing-skill red flags. The candidate picks which
+   cards move past `discovered`.
 
 ### Tailor an application ("apply for this job")
 
@@ -106,7 +121,15 @@ Every command accepts `--json` for machine-readable output.
    `pipeline`-provided refs.
 3. Draft tailored artifacts into `workspace/applications/<appId>/`:
    `resume.md`, `cover-letter.md`, `notes.md`. Rewrite toward the JD using only
-   dossier facts; keep every claim true.
+   dossier facts; keep every claim true. The resume never names the target
+   company or the target role title — no header, objective, summary, or body
+   line may contain either. Naming them makes the resume look customized for
+   the posting (it is) and undermines its authenticity; tailor the content,
+   keep the document generic. The candidate's own past employers and titles
+   are untouched. The cover letter is where company and role are named.
+   Before anything is registered or shown for review, run each document
+   through the `humanizer` skill (prime directive 6) so it reads like the
+   candidate wrote it.
 4. Register them: `app artifact <id> resume applications/<id>/resume.md` (etc.).
    Move status as you go (`app move`): `discovered → matched → tailoring → ready`
    (`ready` requires a resume artifact — the toolbelt enforces it).
@@ -136,7 +159,10 @@ hand only when the harness has no browser tools at all.
    apply-in-browser skill for the file-upload mechanics.
 2. For unknown questions, ask the candidate in chat, wait for the answer, apply
    it, and **persist it**: `node bin/applymate.ts answers set "<question>" "<answer>"`.
-   Normalizing capitalization is fine; changing meaning is not.
+   Normalizing capitalization is fine; changing meaning is not. When a question
+   calls for composed prose rather than a stored fact (a "why this company"
+   box, a summary), draft it from dossier facts and pass it through the
+   `humanizer` skill before it goes into the field.
 3. Click through multi-page flows (Next / Save & Continue) following the
    human-pacing rules below. Save progress notes to the application's
    `notes.md` artifact (portal quirks, where you stopped).
@@ -195,8 +221,11 @@ candidate's livelihood.
    capped at 300 characters (free accounts get only a handful of
    personalized invites per month — spend them deliberately); direct
    messages to 1st-degree connections can be longer; every message under
-   100 words with ONE ask. Show every draft for approval before sending,
-   then record what went out in the application's `notes.md`.
+   100 words with ONE ask. Run every draft through the `humanizer` skill
+   before showing it: the playbook gives the structure, the humanizer pass
+   strips the model tells so it reads like the candidate typed it. Show every
+   draft for approval before sending, then record what went out in the
+   application's `notes.md`.
 3. Track sends so the follow-up rule survives the session:
    `outreach log --target "<name>" --role <role> --channel <channel> --variant A1 [--app <appId>]`
    on every approved send; `outreach list --due` surfaces the one follow-up

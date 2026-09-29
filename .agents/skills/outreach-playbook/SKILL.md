@@ -53,7 +53,11 @@ and only then may its numbers be used.
    profile or post — read it in the browser, don't guess it).
 2. Draft into the application's `notes.md` artifact (or a scratch markdown file
    when outreach precedes an application). Check the caps: < 100 words for
-   messages, ≤ 300 chars for connection notes. One ask per message.
+   messages, ≤ 300 chars for connection notes. One ask per message. Then run
+   every draft through the `humanizer` skill before it is shown: the playbook
+   formulas are skeletons, and the humanizer pass strips the AI tells so the
+   message reads like the candidate wrote it. Facts and numbers stay exactly
+   as gathered in step 1.
 3. **Show every draft and wait for an explicit yes** — nothing leaves the
    machine without it (prime directive 1). A few at a time, never bulk blasts;
    personalized per person, not template spam.

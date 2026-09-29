@@ -15,6 +15,15 @@ description: Tailor resume and cover letter for a tracked application from the d
    Write `workspace/applications/<appId>/resume.md` and `cover-letter.md`,
    tailored to the JD with only dossier facts. Close obvious keyword gaps the
    dossier truly supports; list real gaps in `notes.md` instead of inventing.
+   The resume must not contain the target company's name or the target role's
+   title anywhere — no header, objective, summary, or body line. Naming them
+   makes the resume look customized for the posting; tailor the content, keep
+   the document generic. (The candidate's own past employers and titles stay.
+   The cover letter is where company and role belong.) Before registering,
+   run both documents through the `humanizer` skill —
+   every word that goes out in the candidate's name must pass it (prime
+   directive 6 in AGENTS.md). It strips AI tells so the documents read like
+   the candidate wrote them; facts and claims stay untouched.
 4. Register artifacts:
    - `node bin/applymate.ts app artifact <id> resume applications/<id>/resume.md`
    - `node bin/applymate.ts app artifact <id> coverLetter applications/<id>/cover-letter.md`
