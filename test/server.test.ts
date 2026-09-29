@@ -187,6 +187,51 @@ test("artifact endpoint serves evidence screenshots with an image content-type",
   });
 });
 
+test("discard endpoint closes an application and keeps it visible on the board", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const job = await services.pipeline.addJob({ company: "Acme", title: "SRE", description: "Kafka" });
+    const app = await services.pipeline.startApplication(job.id);
+
+    const res = await fetch(base + "/api/discard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: app.id }),
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { id: string; status: string };
+    assert.equal(body.id, app.id);
+    assert.equal(body.status, "closed");
+
+    const stored = await services.pipeline.getApplication(app.id);
+    assert.equal(stored.status, "closed");
+
+    // the card stays visible, in the closed column of the pipeline board
+    const state = (await (await fetch(base + "/api/state")).json()) as {
+      pipeline: Record<string, { id: string }[]>;
+    };
+    assert.ok((state.pipeline.closed ?? []).some((a) => a.id === app.id));
+  });
+});
+
+test("discard endpoint: unknown application 404s, missing id 400s", async () => {
+  await withServer(async ({ base }) => {
+    const unknown = await fetch(base + "/api/discard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "app-none" }),
+    });
+    assert.equal(unknown.status, 404);
+
+    const noId = await fetch(base + "/api/discard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(noId.status, 400);
+  });
+});
+
 test("rejects non-loopback Host headers (DNS rebinding guard)", async () => {
   await withServer(async ({ base }) => {
     const port = new URL(base).port;
