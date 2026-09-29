@@ -93,6 +93,21 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
     return sendJson(res, 201, record);
   }
 
+  if (method === "POST" && path === "/api/discard") {
+    // The candidate's "not interested" button on the board: closes the
+    // application (any non-terminal → closed per the status machine; a fresh
+    // application can be opened later for the same job).
+    const body = await readJson(req);
+    const id = String(body.id ?? "");
+    if (!id) return sendJson(res, 400, { error: "id is required" });
+    const app = await services.pipeline.getApplication(id).catch(() => null);
+    if (!app) return sendJson(res, 404, { error: `no application ${id}` });
+    const note =
+      typeof body.note === "string" && body.note.trim() ? body.note.trim() : "discarded from the web UI";
+    const moved = await services.pipeline.move(id, "closed", { note });
+    return sendJson(res, 200, { id: moved.id, status: moved.status });
+  }
+
   const appMatch = path.match(/^\/api\/application\/([a-z0-9._-]+)$/i);
   if (method === "GET" && appMatch) {
     const app = await services.pipeline.getApplication(appMatch[1]!);

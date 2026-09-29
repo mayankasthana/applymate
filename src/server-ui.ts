@@ -42,6 +42,8 @@ export const UI_HTML = `<!doctype html>
   .ref { float:right; margin-right:.3rem; font-size:.75rem; border-radius:999px; padding:.05rem .55rem; background:#edf2f7; color:var(--muted); }
   .ref.yes { background:#c6f6d5; color:var(--ok); }
   .ref.no { background:#feebc8; color:#7b341e; }
+  .job .discard { float:right; margin-left:.3rem; border:1px solid var(--line); background:none; color:var(--muted); border-radius:999px; width:1.35rem; height:1.35rem; font-size:.75rem; line-height:1; cursor:pointer; }
+  .job .discard:hover { border-color:#e53e3e; color:#e53e3e; background:#fff5f5; }
   .ostate.follow-up-due { color:#c05621; font-weight:600; }
   .ostate.replied { color:var(--ok); }
   ul.outreach { margin:.3rem 0; padding-left:1.1rem; }
@@ -121,6 +123,9 @@ async function refreshPrefs(){
 const STATUS_ORDER = ["discovered","matched","tailoring","ready","submitted","interviewing","offer","rejected","closed"];
 // appId → outreach messages linked to that application (from /api/state)
 let outreachByApp = {};
+// Discard shows only before real work attaches — after tailoring, closing a
+// card is a conversation with Aja, not a button.
+const DISCARDABLE = ["discovered", "matched"];
 
 function refBadge(appId){
   const msgs = outreachByApp[appId] || [];
@@ -128,6 +133,11 @@ function refBadge(appId){
   if (refs.length) return '<span class="ref yes" title="referral outreach sent to ' + refs.length + ' people">refs ' + refs.length + '</span>';
   if (msgs.length) return '<span class="ref no" title="outreach sent, but no referral yet">no ref</span>';
   return '<span class="ref" title="no outreach logged for this application yet">no ref</span>';
+}
+
+function discardBtn(a){
+  if (!DISCARDABLE.includes(a.status)) return "";
+  return '<button class="discard" data-id="' + esc(a.id) + '" title="not interested — moves this role to Closed" onclick="event.stopPropagation()">✕</button>';
 }
 
 async function refreshBoard(){
@@ -143,6 +153,7 @@ async function refreshBoard(){
     board[s].map((a) =>
       '<div class="job" data-id="' + esc(a.id) + '" data-job="' + esc(a.jobId) + '" onclick="openApp(\\'' + esc(a.id) + '\\')">' +
       scoreBadge(a.matchScore) +
+      discardBtn(a) +
       refBadge(a.id) +
       '<div class="t">' + esc(a.company) + '</div>' +
       '<div class="c">' + esc(a.title) +
@@ -151,6 +162,11 @@ async function refreshBoard(){
     ).join("") + '</div>'
   ).join("");
   $("#board").innerHTML = html || '<div class="empty">no applications yet — ask Aja to find jobs</div>';
+  $("#board").querySelectorAll("button.discard").forEach((b) => b.addEventListener("click", async () => {
+    if (!confirm("Discard this role? The card moves to Closed (a fresh application can be opened later for the same job).")) return;
+    await jpost("/api/discard", { id: b.dataset.id });
+    refreshBoard();
+  }));
 }
 
 async function openApp(id){
