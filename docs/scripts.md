@@ -74,7 +74,8 @@ Recommended keys (suggestions only, values always yours):
 | `app evidence <appId> <file> --kind submit-screenshot [--note n] [--at iso]` | Store submit-page screenshots and confirmations |
 | `app submitted <appId> [--portal p] [--confirmation c] [--at iso]` | Stamp exact submission time + portal + confirmation; walks the machine to `submitted` |
 | `app match <appId>` | Score + attach report to the application |
-| `pipeline` | Kanban view across all statuses, with a `[refs N]` / `[no refs]` referral marker per application (`--json` adds a `referrals` count) |
+| `app pursuit <appId> <green\|amber\|red> [--note n]` | Record the conversion-odds verdict (the second score next to `match`: college/brand/ML gates). Shows as a colored badge on dashboard cards; `green` = push, `amber` = only with a warm referral, `red` = skip |
+| `pipeline` | Kanban view across all statuses, with a `[match N]` score, the `[green\|amber\|red]` pursuit verdict, and a `[refs N]` / `[no refs]` referral marker per application (`--json` adds a `referrals` count) |
 
 **Evidence kinds** are slugs; conventions: `jd-screenshot`, `jd-snapshot`
 (saved page/PDF) on jobs; `submit-screenshot`, `confirmation` on applications.

@@ -291,6 +291,7 @@ async function cmdAppShow({ pos, flags, io, rootDir }: CommandContext): Promise<
   if (job) line(io, `${job.company} — ${job.title}`);
   line(io, `resume from dossier: ${app.resumeRef ?? "(none chosen)"}`);
   line(io, `match: ${app.matchScore !== null ? `${app.matchScore}/100` : "not scored"}${app.matchReportPath ? ` (${app.matchReportPath})` : ""}`);
+  line(io, `pursuit: ${app.pursuit ? `${app.pursuit.verdict}${app.pursuit.note ? ` — ${app.pursuit.note}` : ""}` : "not assessed"}`);
   if (app.submittedAt) {
     line(io, `submitted: ${app.submittedAt}${app.submissionPortal ? ` via ${app.submissionPortal}` : ""}${app.submissionConfirmation ? ` (confirmation ${app.submissionConfirmation})` : ""}`);
   }
@@ -316,6 +317,18 @@ async function cmdAppMove({ pos, flags, io, rootDir }: CommandContext): Promise<
   const app = await pipeline.move(id, to as never, { note: flags.note ? String(flags.note) : null });
   if (flags.json) return jsonOut(io, app);
   line(io, `${app.id}: ${app.history.at(-1)!.from} -> ${app.status}`);
+  return 0;
+}
+
+async function cmdAppPursuit({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const [id, verdict] = pos;
+  if (!id || !verdict) {
+    return failWith(io, "app pursuit <appId> <green|amber|red> [--note n]", "need <appId> and a verdict (green | amber | red)");
+  }
+  const { pipeline } = await services(rootDir);
+  const app = await pipeline.setPursuit(id, verdict as never, { note: flags.note ? String(flags.note) : null });
+  if (flags.json) return jsonOut(io, app.pursuit);
+  line(io, `${app.id}: pursuit ${app.pursuit?.verdict}${app.pursuit?.note ? ` — ${app.pursuit.note}` : ""}`);
   return 0;
 }
 
@@ -393,7 +406,7 @@ async function cmdPipeline({ flags, io, rootDir }: CommandContext): Promise<numb
     line(io, `## ${status}`);
     for (const a of apps) {
       const n = refs.get(a.id) ?? 0;
-      line(io, `  ${a.id}  ${a.company} — ${a.title}${a.matchScore !== null ? `  [match ${a.matchScore}]` : ""}  [${n ? `refs ${n}` : "no refs"}]`);
+      line(io, `  ${a.id}  ${a.company} — ${a.title}${a.matchScore !== null ? `  [match ${a.matchScore}]` : ""}${a.pursuit ? `  [${a.pursuit.verdict}]` : ""}  [${n ? `refs ${n}` : "no refs"}]`);
       total++;
     }
   }
@@ -739,8 +752,10 @@ function printHelp(io: Io, code = 0): number {
       "  app move <id> <status> [--note n]",
       "  app artifact <id> <kind> <path>",
       "  app evidence <appId> <file> --kind submit-screenshot",
-      "  app submitted <appId> [--portal p] [--confirmation c]",
-      "  app match <appId>               score + attach report to application",
+  "  app submitted <appId> [--portal p] [--confirmation c]",
+  "  app match <appId>               score + attach report to application",
+  "  app pursuit <appId> <green|amber|red> [--note n]",
+  "                                  record the conversion-odds verdict (dashboard badge)",
       "  pipeline                        kanban view of all applications",
       "",
       "outreach (message-playbook bookkeeping):",
@@ -798,6 +813,7 @@ const COMMANDS: Command[] = [
   { name: "app evidence", summary: "attach a capture (screenshot/confirmation)", run: cmdAppEvidence },
   { name: "app submitted", summary: "record submission time/portal/confirmation", run: cmdAppSubmitted },
   { name: "app match", summary: "score + attach report", run: cmdAppMatch },
+  { name: "app pursuit", summary: "record conversion-odds verdict (green/amber/red)", run: cmdAppPursuit },
   { name: "pipeline", summary: "kanban view", run: cmdPipeline },
   { name: "outreach log", summary: "record a sent/staged outreach message", run: cmdOutreachLog },
   { name: "outreach list", summary: "open threads / follow-ups due", run: cmdOutreachList },

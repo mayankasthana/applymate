@@ -279,3 +279,33 @@ test("listApplications filters by status", async () => {
     assert.equal(closed[0]!.status, "closed");
   });
 });
+
+test("setPursuit stores verdict/note/timestamp and pipeline() exposes it", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root);
+    const job = await svc.addJob(JOB_INPUT);
+    const app = await svc.startApplication(job.id);
+    const updated = await svc.setPursuit(app.id, "green", { note: "pure infra role, no ML gate", at: "t0" });
+    assert.equal(updated.pursuit?.verdict, "green");
+    assert.equal(updated.pursuit?.note, "pure infra role, no ML gate");
+    assert.equal(updated.pursuit?.at, "t0");
+    const refetched = await makeService(root).then((s) => s.getApplication(app.id));
+    assert.equal(refetched.pursuit?.verdict, "green");
+    const board = await svc.pipeline();
+    assert.equal(board.discovered[0]!.pursuit?.verdict, "green");
+  });
+});
+
+test("setPursuit overwrites a previous verdict and validates input", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root);
+    const job = await svc.addJob(JOB_INPUT);
+    const app = await svc.startApplication(job.id);
+    await svc.setPursuit(app.id, "amber", { note: null });
+    const updated = await svc.setPursuit(app.id, "red", { note: "ML-titled role" });
+    assert.equal(updated.pursuit?.verdict, "red");
+    assert.equal(updated.pursuit?.note, "ML-titled role");
+    assert.rejects(() => svc.setPursuit(app.id, "mauve" as never), /pursuit verdict/i);
+    await assert.rejects(() => svc.setPursuit("app-none", "green"), (err: unknown) => (err as { code?: string }).code === "NOT_FOUND");
+  });
+});

@@ -130,6 +130,39 @@ test("app start/move/list/pipeline flow", async () => {
   });
 });
 
+test("app pursuit records the conversion verdict; board and show surface it", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const jdPath = join(root, "jd.md");
+    await writeFile(jdPath, "Kafka Go");
+    const add = await run(["job", "add", "--company", "Globex", "--title", "SRE", "--file", jdPath], root);
+    const jobId = add.stdout.match(/job-[a-z0-9-]+/)![0]!;
+    const start = await run(["app", "start", jobId], root);
+    const appId = start.stdout.match(/app-[a-z0-9]+/)![0]!;
+
+    const set = await run(["app", "pursuit", appId, "amber", "--note", "referral required"], root);
+    assert.equal(set.code, 0);
+    assert.match(set.stdout, /amber/);
+
+    // board shows the verdict next to the match score
+    const board = await run(["pipeline"], root);
+    assert.match(board.stdout, /\[amber\]/);
+
+    const show = await run(["app", "show", appId], root);
+    assert.match(show.stdout, /pursuit: amber/);
+    assert.match(show.stdout, /referral required/);
+
+    const asJson = await run(["app", "show", appId, "--json"], root);
+    const detail = JSON.parse(asJson.stdout) as { pursuit: { verdict: string; note: string } };
+    assert.equal(detail.pursuit.verdict, "amber");
+    assert.equal(detail.pursuit.note, "referral required");
+
+    const bad = await run(["app", "pursuit", appId, "mauve"], root);
+    assert.equal(bad.code, 1);
+    assert.match(bad.stderr, /pursuit verdict/i);
+  });
+});
+
 test("pipeline and app show surface referral/outreach status", async () => {
   await withTmpDir(async (root) => {
     await run(["init"], root);

@@ -39,6 +39,10 @@ export const UI_HTML = `<!doctype html>
   .score.strong { background:#c6f6d5; color:var(--ok); }
   .score.good { background:#feebc8; }
   .score.fair, .score.stretch { background:#fed7d7; }
+  .pursuit { float:right; margin-right:.3rem; font-size:.75rem; border-radius:999px; padding:.05rem .55rem; background:#edf2f7; color:var(--muted); cursor:help; }
+  .pursuit.green { background:#c6f6d5; color:var(--ok); }
+  .pursuit.amber { background:#feebc8; color:#7b341e; }
+  .pursuit.red { background:#fed7d7; color:#742a2a; }
   .ref { float:right; margin-right:.3rem; font-size:.75rem; border-radius:999px; padding:.05rem .55rem; background:#edf2f7; color:var(--muted); }
   .ref.yes { background:#c6f6d5; color:var(--ok); }
   .ref.no { background:#feebc8; color:#7b341e; }
@@ -101,6 +105,14 @@ function scoreBadge(score, grade){
   return '<span class="score ' + esc(grade||"") + '">' + esc(score) + '</span>';
 }
 
+// Aja's conversion-odds verdict: green = push, amber = only with a referral, red = skip.
+const PURSUIT_LEGEND = "green: push · amber: only with a warm referral · red: skip";
+function pursuitBadge(p){
+  if (!p || !p.verdict) return "";
+  const tip = PURSUIT_LEGEND + (p.note ? " — " + p.note : "");
+  return '<span class="pursuit ' + esc(p.verdict) + '" title="' + esc(tip) + '">' + esc(p.verdict) + '</span>';
+}
+
 async function refreshPrefs(){
   const state = await jget("/api/state");
   // keys are normalized ("candidatename"); greet the candidate by first name
@@ -153,6 +165,7 @@ async function refreshBoard(){
     board[s].map((a) =>
       '<div class="job" data-id="' + esc(a.id) + '" data-job="' + esc(a.jobId) + '" onclick="openApp(\\'' + esc(a.id) + '\\')">' +
       scoreBadge(a.matchScore) +
+      pursuitBadge(a.pursuit) +
       discardBtn(a) +
       refBadge(a.id) +
       '<div class="t">' + esc(a.company) + '</div>' +
@@ -191,6 +204,10 @@ async function openApp(id){
     '<dl class="meta">' +
     '<dt>status</dt><dd>' + esc(app.status) + '</dd>' +
     '<dt>match</dt><dd>' + (app.matchScore ?? job.matchScore ?? "not scored") + '</dd>' +
+    '<dt>pursuit</dt><dd>' + (app.pursuit
+      ? '<span class="pursuit ' + esc(app.pursuit.verdict) + '" style="float:none" title="' + esc(PURSUIT_LEGEND) + '">' + esc(app.pursuit.verdict) + '</span>' +
+        (app.pursuit.note ? ' — ' + esc(app.pursuit.note) : '')
+      : 'not assessed') + '</dd>' +
     '<dt>posting</dt><dd>' + (job.url
       ? '<a target="_blank" rel="noopener" href="' + esc(job.url) + '">open requisition ↗</a>'
       : '-') + '</dd>' +

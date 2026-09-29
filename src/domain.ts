@@ -159,6 +159,23 @@ export interface HistoryEntry {
   note: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Pursuit verdict (agent's conversion-odds judgment alongside the match score)
+// ---------------------------------------------------------------------------
+
+export const PURSUIT_VERDICTS = ["green", "amber", "red"] as const;
+export type PursuitVerdict = (typeof PURSUIT_VERDICTS)[number];
+
+export interface Pursuit {
+  verdict: PursuitVerdict;
+  note: string | null;
+  at: string;
+}
+
+export function isPursuitVerdict(value: string): value is PursuitVerdict {
+  return (PURSUIT_VERDICTS as readonly string[]).includes(value);
+}
+
 export interface Application {
   id: string;
   jobId: string;
@@ -166,6 +183,8 @@ export interface Application {
   resumeRef: string | null;
   matchScore: number | null;
   matchReportPath: string | null;
+  /** Conversion-odds verdict (college/brand/ML gates) set by the agent. */
+  pursuit: Pursuit | null;
   artifacts: ApplicationArtifacts;
   history: HistoryEntry[];
   /** Exactly when the application was submitted (set via `app submitted`). */
@@ -195,6 +214,7 @@ export class Application {
       resumeRef: strOr(input.resumeRef, null),
       matchScore: null,
       matchReportPath: null,
+      pursuit: null,
       artifacts: { resume: null, coverLetter: null, notes: null },
       history: [],
       submittedAt: null,
@@ -212,6 +232,16 @@ export class Application {
     if (!str(app.jobId)) throw new DomainError("application is missing required field: jobId");
     if (!isStatus(app.status)) {
       throw new DomainError(`application has unknown status: ${String(app.status)}`);
+    }
+    if (app.pursuit !== null && app.pursuit !== undefined) {
+      if (!isPursuitVerdict(String(app.pursuit.verdict))) {
+        throw new DomainError(
+          `application pursuit verdict must be one of: ${PURSUIT_VERDICTS.join(", ")} (got: ${String(app.pursuit.verdict)})`
+        );
+      }
+      app.pursuit = { verdict: app.pursuit.verdict, note: strOr(app.pursuit.note, null), at: str(app.pursuit.at) };
+    } else {
+      app.pursuit = null;
     }
     app.submittedAt = strOr(app.submittedAt, null);
     app.submissionPortal = strOr(app.submissionPortal, null);
@@ -233,6 +263,18 @@ export class Application {
       updatedAt: at,
       history: [...app.history, { at, from: app.status, to, note }],
     };
+  }
+
+  /** Immutable pursuit-verdict update (overwrites any previous verdict). */
+  static recordPursuit(
+    app: Application,
+    verdict: PursuitVerdict,
+    { at = new Date().toISOString(), note = null }: { at?: string; note?: string | null } = {}
+  ): Application {
+    if (!isPursuitVerdict(verdict)) {
+      throw new DomainError(`pursuit verdict must be one of: ${PURSUIT_VERDICTS.join(", ")} (got: ${String(verdict)})`);
+    }
+    return { ...app, pursuit: { verdict, note: note ?? null, at }, updatedAt: at };
   }
 }
 
