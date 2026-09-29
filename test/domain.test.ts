@@ -120,3 +120,22 @@ test("Application.recordTransition refuses illegal moves", () => {
   const app = Application.create({ jobId: "job-acme-xxxx" });
   assert.throws(() => Application.recordTransition(app, "offer"), DomainError);
 });
+
+test("Application.recordPursuit stores verdict/note immutably and rejects unknown verdicts", () => {
+  const app = Application.create({ jobId: "job-acme-xxxx" }, { now: "2026-09-27T00:00:00Z" });
+  const scored = Application.recordPursuit(app, "amber", { at: "2026-09-30T10:00:00Z", note: "referral required" });
+  assert.deepEqual(scored.pursuit, { verdict: "amber", note: "referral required", at: "2026-09-30T10:00:00Z" });
+  assert.equal(app.pursuit, null); // original untouched
+  const again = Application.recordPursuit(scored, "red", { at: "2026-09-30T11:00:00Z", note: null });
+  assert.equal(again.pursuit?.verdict, "red");
+  assert.throws(() => Application.recordPursuit(app, "mauve" as never), /pursuit verdict/i);
+});
+
+test("Application.validate rejects a record with an unknown pursuit verdict", () => {
+  const app = Application.create({ jobId: "job-acme-xxxx" });
+  assert.equal(Application.validate(app).pursuit, null);
+  assert.throws(
+    () => Application.validate({ ...app, pursuit: { verdict: "sparkly", note: null, at: "t" } } as never),
+    /pursuit verdict/i
+  );
+});

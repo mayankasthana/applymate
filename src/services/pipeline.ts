@@ -4,6 +4,8 @@ import {
   type Application as ApplicationRecord,
   type Job as JobRecord,
   type JobInput,
+  type Pursuit,
+  type PursuitVerdict,
   type Status,
   STATUSES,
   TERMINAL_STATUSES,
@@ -26,6 +28,7 @@ export interface AppSummary {
   title: string;
   status: Status;
   matchScore: number | null;
+  pursuit: Pursuit | null;
   resumeRef: string | null;
   updatedAt: string;
   jobUrl: string | null;
@@ -143,6 +146,15 @@ export class PipelineService {
     });
   }
 
+  /**
+   * Record the agent's conversion-odds verdict (the second score next to the
+   * match score: college/brand/ML gates). Overwrites any previous verdict.
+   */
+  async setPursuit(id: string, verdict: PursuitVerdict, { note = null, at = new Date().toISOString() }: { note?: string | null; at?: string } = {}): Promise<ApplicationRecord> {
+    const app = await this.applications.get(id);
+    return this.applications.put(Application.recordPursuit(app, verdict, { note, at }));
+  }
+
   async setResumeRef(id: string, resumeRef: string | null): Promise<ApplicationRecord> {
     const app = await this.applications.get(id);
     return this.applications.put({
@@ -206,6 +218,7 @@ async attachArtifact(id: string, kind: "resume" | "coverLetter" | "notes", relPa
         title: job?.title ?? "(missing job)",
         status: app.status,
         matchScore: app.matchScore ?? job?.matchScore ?? null,
+        pursuit: app.pursuit ?? null,
         resumeRef: app.resumeRef,
         updatedAt: app.updatedAt,
         jobUrl: job?.url ?? null,

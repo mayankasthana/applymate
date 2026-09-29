@@ -72,7 +72,7 @@ judgment are yours. Full reference: `docs/scripts.md`. Cheatsheet:
 |---|---|
 | setup | `init`, `config get|set`, `dossier index|search|files` |
 | memory | `prefs list|get|set|missing`, `answers list|get|set` |
-| pipeline | `job add|list|show|match`, `app start|list|show|move|artifact|match`, `pipeline` |
+| pipeline | `job add|list|show|match`, `app start|list|show|move|artifact|match|pursuit`, `pipeline` |
 | chat | `chat send|reply|poll|log|serve` |
 | artifacts | `render <file.md>` (markdown → standalone HTML) |
 | outreach | `outreach log|list|followup|replied` (playbook sends + the one follow-up) |
@@ -108,8 +108,14 @@ Every command accepts `--json` for machine-readable output.
    `boardvisibility`): each lands as a `discovered` card in the review UI, and
    the candidate discards unwanted ones with the card's ✕ button (moves the
    application to `closed`). Present a shortlist in chat: company, role, score,
-   grade, 1-line "why", and missing-skill red flags. The candidate picks which
-   cards move past `discovered`.
+   grade, 1-line "why", and missing-skill red flags. Next to the match score,
+   set the **pursuit verdict** (`app pursuit <appId> <green|amber|red>
+   --note why`): the conversion-odds call from the candidate's standing gates
+   (prefs `collegetier`, `mlbackground`, `conversionprioritization`) — green =
+   push, amber = only with a warm referral, red = skip. It renders as a badge
+   on the card; red means the candidate chose not to spend referral/interview
+   energy there, so say so in the shortlist instead of burying it. The
+   candidate picks which cards move past `discovered`.
 
 ### Tailor an application ("apply for this job")
 
