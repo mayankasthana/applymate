@@ -151,6 +151,13 @@ every tailored resume, no exceptions):**
   Never join two titles or a title and its dates with separators on one line —
   ATS parsers mangle that. Canonical format: the candidate's per-company PDFs in
   the dossier (`Resume_Company_Team.pdf`).
+- **Meta lines are parser-fed.** Portal resume parsers (Workday verified
+  2026-09-30) autofill forms from these lines: company line is plain text
+  `Company, City, Country` — no heading markup, parentheses, sub-brands, or
+  em dashes; date line is exactly `MMM YYYY – MMM YYYY` with nothing else
+  (no italics, no inline notes); context paragraphs are plain text, never
+  italic. Decorative meta lines made Workday drop every company and merge
+  the summary into a job description.
 - **GenAI/agentic content is standing-required**, not optional polish: the
   the candidate's lab work section (multi-agent quant-research system, and the
   job-application pipeline **named applymate** with its public repo link —

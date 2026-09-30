@@ -28,6 +28,15 @@ description: Tailor resume and cover letter for a tracked application from the d
    "Resume standards"):
    - One title per line — each position is company line, title alone, date
      range alone. Never join titles/dates on one line (ATS).
+   - Meta lines must be parser-friendly (this is what portal resume parsers
+     read to autofill forms — verified on Workday 2026-09-30 where decorative
+     company lines dropped every company): company line is plain text
+     `Company, City, Country` — no heading markup, no parentheses, no
+     sub-brand names, no em dashes; title line may be bold; date line is
+     `MMM YYYY – MMM YYYY` (en dash) with nothing else on the line — no
+     italics, no notes ("promoted within 15 months" goes in the description
+     in parentheses); context paragraphs sit plain between dates and bullets,
+     never italic. Company belongs to the line, not the heading.
    - GenAI/agentic content always in: the candidate's lab work section, a
      hackathon RAG win, summary clause, LangChain/RAG + agentic breadth
      keywords. Engineering framing only; no returns/strategy/P&L, no
