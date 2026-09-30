@@ -24,12 +24,26 @@ description: Tailor resume and cover letter for a tracked application from the d
    every word that goes out in the candidate's name must pass it (prime
    directive 6 in AGENTS.md). It strips AI tells so the documents read like
    the candidate wrote them; facts and claims stay untouched.
-4. Register artifacts:
+4. Apply the candidate-mandated resume standards (full text in AGENTS.md,
+   "Resume standards"):
+   - One title per line — each position is company line, title alone, date
+     range alone. Never join titles/dates on one line (ATS).
+   - GenAI/agentic content always in: the candidate's lab work section, a
+     hackathon RAG win, summary clause, LangChain/RAG + agentic breadth
+     keywords. Engineering framing only; no returns/strategy/P&L, no
+     ML-modeling claims.
+   - The standing open-source list is candidate-specific and lives in the
+     workspace note `resume-standards`, not in this file.
+   - Ship as a 2-page A4 PDF: the stock `render` HTML has no print CSS — apply
+     a print stylesheet and verify the page count before showing the PDF.
+5. Register artifacts:
    - `node bin/applymate.ts app artifact <id> resume applications/<id>/resume.md`
    - `node bin/applymate.ts app artifact <id> coverLetter applications/<id>/cover-letter.md`
-5. `node bin/applymate.ts render` each artifact; ensure the review UI is running
-   (`chat serve`) and tell the candidate what to review and where.
-6. Move status as work completes: `matched → tailoring → ready`. `ready`
+6. `node bin/applymate.ts render` each artifact; ensure the review UI is running
+   (`chat serve`) and tell the candidate what to review and where. **Portal
+   form work does not start until the candidate has reviewed these artifacts** —
+   "apply to X" authorizes the tailoring, not a bypass of the review.
+7. Move status as work completes: `matched → tailoring → ready`. `ready`
    requires the resume artifact (toolbelt-enforced). Submission waits for the
    candidate's explicit go — always.
 
