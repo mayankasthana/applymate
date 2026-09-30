@@ -36,6 +36,9 @@ description: Tailor resume and cover letter for a tracked application from the d
      workspace note `resume-standards`, not in this file.
    - Ship as a 2-page A4 PDF: the stock `render` HTML has no print CSS — apply
      a print stylesheet and verify the page count before showing the PDF.
+   - Upload/submit under a generic filename (`Resume.pdf`) —
+     never the target company/role in the filename; recruiters see it.
+     Per-company names are for the private dossier copies only.
 5. Register artifacts:
    - `node bin/applymate.ts app artifact <id> resume applications/<id>/resume.md`
    - `node bin/applymate.ts app artifact <id> coverLetter applications/<id>/cover-letter.md`

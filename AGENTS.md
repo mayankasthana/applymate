@@ -165,6 +165,12 @@ every tailored resume, no exceptions):**
 - **Ship as a 2-page A4 PDF.** The stock `render` output has no print CSS and
   spills past 2 pages — apply a print stylesheet (≈9–10pt, tight A4 margins)
   and verify the page count before showing the candidate the PDF.
+- **Generic filename on everything that leaves the machine.** The uploaded /
+  submitted resume file must be named for the candidate only —
+  `Resume.pdf` — never the target company, role, or site
+  (`..._Company_Role.pdf` is wrong); portals show the
+  filename to recruiters. Per-company naming is for the candidate's private
+  dossier copies only.
 
 ### Apply in the browser (forms, portals, Next buttons)
 
