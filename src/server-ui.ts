@@ -28,6 +28,11 @@ export const UI_HTML = `<!doctype html>
   .chip input { border:1px solid #bee3f8; border-radius:999px; padding:.15rem .6rem; font-size:.85rem; min-width:9rem; }
   .chip button, .btn { border:0; background:var(--accent); color:#fff; border-radius:999px; padding:.22rem .8rem; font-size:.85rem; cursor:pointer; }
   #board { display:grid; gap:1rem; padding:1rem; }
+  .boardtools { display:flex; gap:.4rem; padding:.6rem 1rem; border-bottom:1px solid var(--line); }
+  .boardtools input { flex:1; border:1px solid var(--line); border-radius:8px; padding:.35rem .7rem; font:inherit; font-size:.9rem; outline:none; }
+  .boardtools input:focus { border-color:var(--accent); }
+  .boardtools button { border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:8px; padding:0 .6rem; font-size:.85rem; cursor:pointer; }
+  .boardtools button:hover { border-color:var(--accent); color:var(--accent); }
   .status h3 { font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 .4rem; }
   .job { border:1px solid var(--line); border-radius:8px; padding:.55rem .75rem; margin-bottom:.45rem; background:#fff; cursor:pointer; }
   .job:hover { border-color:var(--accent); }
@@ -83,6 +88,10 @@ export const UI_HTML = `<!doctype html>
   </section>
   <section class="card">
     <h2>Pipeline</h2>
+    <div class="boardtools">
+      <input id="boardSearch" placeholder="filter the board: req id (R-…), company, title, or any term — e.g. AI, staff" autocomplete="off" spellcheck="false">
+      <button id="boardSearchClear" title="clear the filter" style="display:none">✕</button>
+    </div>
     <div id="board"><div class="empty">loading…</div></div>
   </section>
   <section class="card">
@@ -152,17 +161,24 @@ function discardBtn(a){
   return '<button class="discard" data-id="' + esc(a.id) + '" title="not interested — moves this role to Closed" onclick="event.stopPropagation()">✕</button>';
 }
 
+// The board filter: what's typed in the search box. Applied server-side via
+// /api/state?q= so the 10s auto-refresh keeps the filter active.
+let boardQuery = "";
+
 async function refreshBoard(){
-  const state = await jget("/api/state");
+  const state = await jget("/api/state" + (boardQuery ? "?q=" + encodeURIComponent(boardQuery) : ""));
   outreachByApp = {};
   for (const m of (state.outreach||[])) {
     if (!m.appId) continue;
     (outreachByApp[m.appId] = outreachByApp[m.appId] || []).push(m);
   }
   const board = state.pipeline || {};
+  let total = 0;
   const html = STATUS_ORDER.filter((s) => (board[s]||[]).length).map((s) =>
     '<div class="status"><h3>' + esc(s) + '</h3>' +
-    board[s].map((a) =>
+    board[s].map((a) => {
+      total++;
+      return (
       '<div class="job" data-id="' + esc(a.id) + '" data-job="' + esc(a.jobId) + '" onclick="openApp(\\'' + esc(a.id) + '\\')">' +
       scoreBadge(a.matchScore) +
       pursuitBadge(a.pursuit) +
@@ -172,15 +188,35 @@ async function refreshBoard(){
       '<div class="c">' + esc(a.title) +
       (a.jobUrl ? ' <a class="req" target="_blank" rel="noopener" href="' + esc(a.jobUrl) + '" onclick="event.stopPropagation()" title="open the requisition page">req ↗</a>' : '') +
       '</div></div>'
-    ).join("") + '</div>'
+      );
+    }).join("") + '</div>'
   ).join("");
-  $("#board").innerHTML = html || '<div class="empty">no applications yet — ask Aja to find jobs</div>';
+  $("#board").innerHTML = (html || (boardQuery
+    ? '<div class="empty">no cards match "' + esc(boardQuery) + '" — clear the filter to see the whole board</div>'
+    : '<div class="empty">no applications yet — ask Aja to find jobs</div>'));
+  $("#boardSearchClear").style.display = boardQuery ? "" : "none";
   $("#board").querySelectorAll("button.discard").forEach((b) => b.addEventListener("click", async () => {
     if (!confirm("Discard this role? The card moves to Closed (a fresh application can be opened later for the same job).")) return;
     await jpost("/api/discard", { id: b.dataset.id });
     refreshBoard();
   }));
 }
+
+// Typing filters live (debounced); the box lives outside #board so the
+// auto-refresh never steals focus mid-search.
+let searchTimer = null;
+$("#boardSearch").addEventListener("input", (e) => {
+  boardQuery = e.target.value.trim();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(refreshBoard, 150);
+});
+$("#boardSearchClear").addEventListener("click", () => {
+  $("#boardSearch").value = "";
+  boardQuery = "";
+  clearTimeout(searchTimer);
+  refreshBoard();
+  $("#boardSearch").focus();
+});
 
 async function openApp(id){
   const app = await jget("/api/application/" + id);
