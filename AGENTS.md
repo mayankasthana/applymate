@@ -152,12 +152,13 @@ every tailored resume, no exceptions):**
   ATS parsers mangle that. Canonical format: the candidate's per-company PDFs in
   the dossier (`Resume_Company_Team.pdf`).
 - **GenAI/agentic content is standing-required**, not optional polish: the
-  the candidate's lab work section (multi-agent quant-research system, multi-agent
-  job-application pipeline), a hackathon win, a summary clause,
-  and LangChain/RAG + agentic-systems breadth keywords go into every resume.
-  Engineering framing only — no returns/strategy/P&L, no ML-modeling claims
-  (prefs `mlbackground` still governs; hard rules in the dossier's
-  `the framing note`).
+  the candidate's lab work section (multi-agent quant-research system, and the
+  job-application pipeline **named applymate** with its public repo link —
+  the project's public repo link), a hackathon win, a
+  summary clause, and LangChain/RAG + agentic-systems breadth keywords go
+  into every resume. Engineering framing only — no returns/strategy/P&L, no
+  ML-modeling claims (prefs `mlbackground` still governs; hard rules in the
+  the dossier's framing note).
   - The standing open-source list (which projects, and the exact wording
     rules for each) is candidate-specific and lives in the workspace note
     `resume-standards`, not in this file.
