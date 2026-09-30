@@ -29,6 +29,39 @@ and only then may its numbers be used.
 5. End with ONE low-friction ask (a 15-min chat, a pointer, a yes/no).
 6. Replies refund InMail credits — target hard, and follow up once after 4–5 days (tracked; see below).
 
+## Scam-aware drafting (India — every referral ask, invite, and follow-up)
+
+Indian professionals are hyper-alert to job scams (fake recruiters, phishing,
+"refer me" spam). Anything that pattern-matches a scam gets ignored or
+reported — so every draft gets this check before the humanizer pass:
+
+- **Never ask for "insider" anything.** No "insider read", "insider info",
+  "what's it really like inside". The ask is a referral or a pointer, never
+  information extraction — asking for confidential-sounding info makes the
+  recipient uncomfortable and scam-alarmed.
+- **Lead with the verifiable thread.** Name the real connection in line 1 —
+  mutuals in common, ex-employer overlap, college — only what both LinkedIn
+  profiles actually show. A checkable thread is the strongest "real person"
+  signal; vague or faked familiarity is the strongest scam signal. Never
+  invent or stretch a tie.
+- **Name the exact req.** Role title (+ req ID when known) and location in
+  the first or second line. "Roles at your company" reads as mass spam.
+- **Give the referrer a forwardable fit line.** Level, years, stack, one
+  quantified proof point — what they need to justify a referral in 10
+  seconds.
+- **The ask is a portal action, not a conversation.** "Would you be
+  comfortable referring me? Happy to send my resume" — offer the resume
+  yourself; never ask them to click off-platform links or send anything to
+  an email address (that is phishing shape), and never ask for *their*
+  details.
+- **Plain register, zero pressure.** No urgency ("urgent", "ASAP"), no
+  generic flattery, no "kindly", no exclamation stacks; one sincere out
+  ("completely understand if not") and no follow-up nagging beyond the
+  single tracked E-follow-up.
+
+Scam-avoidance and conversion are the same move: specific, verifiable, easy
+to act on, zero obligation.
+
 ## Pick the variant
 
 | Situation | Variant |
@@ -53,7 +86,9 @@ and only then may its numbers be used.
    profile or post — read it in the browser, don't guess it).
 2. Draft into the application's `notes.md` artifact (or a scratch markdown file
    when outreach precedes an application). Check the caps: < 100 words for
-   messages, ≤ 300 chars for connection notes. One ask per message. Then run
+   messages, ≤ 300 chars for connection notes. One ask per message. Check every
+   draft against the scam-aware rules above (especially: no "insider" asks).
+   Then run
    every draft through the `humanizer` skill before it is shown: the playbook
    formulas are skeletons, and the humanizer pass strips the AI tells so the
    message reads like the candidate wrote it. Facts and numbers stay exactly
