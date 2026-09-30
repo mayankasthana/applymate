@@ -86,7 +86,10 @@ to act on, zero obligation.
    profile or post — read it in the browser, don't guess it).
 2. Draft into the application's `notes.md` artifact (or a scratch markdown file
    when outreach precedes an application). Check the caps: < 100 words for
-   messages, ≤ 300 chars for connection notes. One ask per message. Check every
+   messages; connection notes ≤ 300 chars on free accounts, up to ~500 on paid
+   plans — read prefs `linkedinplan` for the candidate's plan and verify the
+   live counter in the compose UI (LinkedIn adjusts limits). One ask per
+   message. Check every
    draft against the scam-aware rules above (especially: no "insider" asks).
    Then run
    every draft through the `humanizer` skill before it is shown: the playbook

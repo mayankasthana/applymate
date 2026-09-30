@@ -223,10 +223,12 @@ candidate's livelihood.
    managers, recruiters, referrers, connection notes, follow-ups, subject
    lines). Its filled-in proof points belong to the author it was supplied
    from — fill every bracket and every number from the dossier, `answers`,
-   and `prefs`, never from the playbook's examples. Connection notes are
-   capped at 300 characters (free accounts get only a handful of
-   personalized invites per month — spend them deliberately); direct
-   messages to 1st-degree connections can be longer; every message under
+   and `prefs`, never from the playbook's examples. Connection notes cap at
+   300 characters on free accounts and ~500 on paid plans — the candidate's
+   plan lives in prefs `linkedinplan`; verify the live counter in the compose
+   UI when sending, and check the InMail/invite quota live in the invitation
+   manager rather than assuming free-account scarcity. Direct messages to
+   1st-degree connections can be longer; every message under
    100 words with ONE ask. Draft scam-aware for India (the skill has the full
    checklist): recipients are hyper-alert to job scams, so never ask for
    "insider" anything (reads as information extraction), lead with the
