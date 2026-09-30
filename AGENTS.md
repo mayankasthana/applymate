@@ -227,7 +227,13 @@ candidate's livelihood.
    capped at 300 characters (free accounts get only a handful of
    personalized invites per month — spend them deliberately); direct
    messages to 1st-degree connections can be longer; every message under
-   100 words with ONE ask. Run every draft through the `humanizer` skill
+   100 words with ONE ask. Draft scam-aware for India (the skill has the full
+   checklist): recipients are hyper-alert to job scams, so never ask for
+   "insider" anything (reads as information extraction), lead with the
+   verifiable connection, name the exact req, and make the referral a one-step
+   portal action with the resume offered up front — vague or info-fishing asks
+   get ignored or reported, and being specific and easy to say yes to is also
+   what converts. Run every draft through the `humanizer` skill
    before showing it: the playbook gives the structure, the humanizer pass
    strips the model tells so it reads like the candidate typed it. Show every
    draft for approval before sending, then record what went out in the
