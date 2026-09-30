@@ -143,12 +143,39 @@ Every command accepts `--json` for machine-readable output.
    if it is not running and tell the candidate what to review. `ready → submitted`
    **only** after the candidate explicitly confirms, and only the candidate submits.
 
+**Resume standards (candidate-mandated 2026-09-30 after corrections — apply to
+every tailored resume, no exceptions):**
+
+- **One title per line.** Every position is its own block: company line, then
+  the title alone on its own line, then the date range alone on the next line.
+  Never join two titles or a title and its dates with separators on one line —
+  ATS parsers mangle that. Canonical format: the candidate's per-company PDFs in
+  the dossier (`Resume_Company_Team.pdf`).
+- **GenAI/agentic content is standing-required**, not optional polish: the
+  the candidate's lab work section (multi-agent quant-research system, multi-agent
+  job-application pipeline), a hackathon win, a summary clause,
+  and LangChain/RAG + agentic-systems breadth keywords go into every resume.
+  Engineering framing only — no returns/strategy/P&L, no ML-modeling claims
+  (prefs `mlbackground` still governs; hard rules in the dossier's
+  `the framing note`).
+  - The standing open-source list (which projects, and the exact wording
+    rules for each) is candidate-specific and lives in the workspace note
+    `resume-standards`, not in this file.
+- **Ship as a 2-page A4 PDF.** The stock `render` output has no print CSS and
+  spills past 2 pages — apply a print stylesheet (≈9–10pt, tight A4 margins)
+  and verify the page count before showing the candidate the PDF.
+
 ### Apply in the browser (forms, portals, Next buttons)
 
 The browser is the default way to apply. Use the harness's browser/computer-use
 tools whenever they exist (ZCode browser use, Claude computer use, Antigravity
 browser, ...); fall back to preparing answers for the candidate to enter by
 hand only when the harness has no browser tools at all.
+**But not before the artifacts are reviewed.** "Apply to X" authorizes the
+work, not a shortcut past it: the tailored resume (and cover letter) must be
+rendered and shown to the candidate — and the resume PDF generated — before
+the portal is opened. No dialog clicks, form fills, or account sign-ins for
+that application until the candidate has seen the artifacts.
 
 1. Read the candidate's form memory first: `node bin/applymate.ts answers list`, and
    `answers get "<question>"` per field. Fill what you know; **never guess
