@@ -9,6 +9,7 @@ import { renderDocument, escapeHtml } from "./services/markdown.ts";
 import { loadDossierIndex } from "./services/dossier.ts";
 import { scoreMatch } from "./services/matcher.ts";
 import { withState } from "./services/outreach.ts";
+import { filterBoard } from "./services/board-search.ts";
 
 const MAX_BODY_BYTES = 1_000_000;
 const RENDERABLE = /\.(md|markdown|txt)$/i;
@@ -66,7 +67,8 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
       services.outreach.list({ all: true }),
     ]);
     return sendJson(res, 200, {
-      pipeline,
+      // the board search box: ?q= filters cards (req id, company, free terms)
+      pipeline: filterBoard(pipeline, url.searchParams.get("q")),
       preferences: prefs,
       missingPreferences: missing,
       outreach: outreach.map((m) => withState(m)),

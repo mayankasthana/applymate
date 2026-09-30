@@ -120,6 +120,37 @@ test("state endpoint exposes pipeline, prefs and missing preferences", async () 
   });
 });
 
+test("state endpoint filters the pipeline through ?q= (req id, company, terms)", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const adtech = await services.pipeline.addJob({
+      company: "Example Retail Co",
+      title: "Staff Software Engineer — Advertising",
+      description: "ad servers",
+      url: "https://walmart.example/job/STAFF--SOFTWARE-ENGINEER_R-2646399",
+    });
+    const other = await services.pipeline.addJob({ company: "InMobi", title: "Staff Engineer I", description: "ads" });
+    const adtechApp = await services.pipeline.startApplication(adtech.id);
+    const otherApp = await services.pipeline.startApplication(other.id);
+
+    const idsFor = async (q: string) => {
+      const state = (await (await fetch(base + "/api/state?q=" + encodeURIComponent(q))).json()) as {
+        pipeline: Record<string, { id: string }[]>;
+      };
+      return Object.values(state.pipeline).flat().map((a) => a.id).sort();
+    };
+
+    // req number lives in the posting URL
+    assert.deepEqual(await idsFor("R-2646399"), [adtechApp.id]);
+    // company + free term, case-insensitive
+    assert.deepEqual(await idsFor("inmobi"), [otherApp.id]);
+    assert.deepEqual(await idsFor("advertising"), [adtechApp.id]);
+    // AND semantics and the no-match case
+    assert.deepEqual(await idsFor("walmart staff"), [adtechApp.id]);
+    assert.deepEqual(await idsFor("inmobi walmart"), []);
+  });
+});
+
 test("application endpoint joins job details", async () => {
   await withServer(async ({ base, config }) => {
     const services = makeServices(config);

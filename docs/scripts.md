@@ -117,7 +117,7 @@ motion and which do not.
 | `chat reply <text...>` | Agent posts a reply |
 | `chat poll [--since n] [--wait seconds]` | Fetch new *user* messages; long-polls up to `wait` |
 | `chat log [--since n]` | Full transcript |
-| `chat serve [--port p]` | Local chat/review UI (loopback only) |
+| `chat serve [--port p]` | Local chat/review UI (loopback only); the pipeline board has a search box — filter cards by req number (e.g. `R-2646399`), company, title, score, or any free term (`AI`, `staff`); multiple terms AND together (`GET /api/state?q=`) |
 
 ## Browser rig (local laya form-filling rig)
 
