@@ -165,8 +165,14 @@ function discardBtn(a){
 // /api/state?q= so the 10s auto-refresh keeps the filter active.
 let boardQuery = "";
 
+// Guards against out-of-order renders: a slow unfiltered fetch (initial load,
+// auto-refresh tick) must never overwrite a newer filtered one.
+let boardFetch = 0;
+
 async function refreshBoard(){
+  const me = ++boardFetch;
   const state = await jget("/api/state" + (boardQuery ? "?q=" + encodeURIComponent(boardQuery) : ""));
+  if (me !== boardFetch) return;
   outreachByApp = {};
   for (const m of (state.outreach||[])) {
     if (!m.appId) continue;
