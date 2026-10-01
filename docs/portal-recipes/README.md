@@ -22,10 +22,12 @@ employers share an ATS, so a `workday.md` recipe serves every Workday tenant:
 
 | file | covers | last verified |
 |---|---|---|
+| [ashby.md](ashby.md) | jobs.ashbyhq.com boards — finding the board from a marketing careers page, UUID job links, reading roles + remote type | 2026-10-01 |
+| [atlassian.md](atlassian.md) | atlassian.com careers — liveness-checking a req, bypassing the unusable function/country filters, remote confirmation | 2026-10-01 |
 | [greenhouse.md](greenhouse.md) | greenhouse.io job boards — typeahead flyout fields, chip-selection verification, DataTransfer resume upload, submit/confirmation flow | 2026-10-01 |
 | [icims.md](icims.md) | icims.com — iframe traversal (`icims_content_iframe`), GDPR/hCaptcha handling, candidate profile updates, verification | 2026-10-01 |
 | [linkedin.md](linkedin.md) | linkedin.com — messaging, connection invites, job-card interactions, reading job descriptions, verification discipline | 2026-10-01 |
-| [phenom.md](phenom.md) | Phenom "pcsx" apply portals (jobs.autodesk.com et al.) — resume upload, reload behavior, click fallbacks | in the field; date not recorded |
+| [phenom.md](phenom.md) | Phenom "pcsx" apply portals and public job boards (jobs.autodesk.com, jobs.twilio.com et al.) — resume upload, reload behavior, click fallbacks, search/facet UI | 2026-10-01 |
 | [workday.md](workday.md) | Workday recruiting (myworkdaysite.com) — apply-flow URLs, shadow-DOM form filling, account-creation recovery, duplicate-application detection | 2026-10-01 |
 
 ## Recipe format
