@@ -109,6 +109,22 @@ outreach list on the application sheet, and `pipeline` / `app show` carry the
 same status — so at any moment it is clear which roles have a referral in
 motion and which do not.
 
+## Reminders (dated decisions that must resurface)
+
+A deadline written in prose is a deadline nobody sees — these are read by the
+boot sequence (`reminders list --due`) and by the review UI's "Needs you now"
+panel, so any harness in any session trips over what's due. The rule: the
+moment a decision of the form "if nothing by \<date\>, do X" is made, register
+it; when it's handled (or the deadline moves), retire it.
+
+| command | what it does |
+|---|---|
+| `reminders add <title...> --due <iso-date> [--app appId] [--note n] [--at iso]` | Register a dated decision the moment it is made; `--note` carries the context a future session needs |
+| `reminders list [--due] [--all] [--app id]` | Open reminders soonest-due first; `--due` = overdue right now; `--all` adds done history |
+| `reminders done <id> [--at iso]` | Record the decision acted on (keeps the first done time) |
+
+Records live in `workspace/reminders/<id>.json` (personal, gitignored).
+
 ## Chat
 
 | command | what it does |
@@ -117,7 +133,7 @@ motion and which do not.
 | `chat reply <text...>` | Agent posts a reply |
 | `chat poll [--since n] [--wait seconds]` | Fetch new *user* messages; long-polls up to `wait` |
 | `chat log [--since n]` | Full transcript |
-| `chat serve [--port p]` | Local chat/review UI (loopback only); the pipeline board has a search box — filter cards by req number (e.g. `R-2646399`), company, title, score, or any free term (`AI`, `staff`); multiple terms AND together (`GET /api/state?q=`) |
+| `chat serve [--port p]` | Local chat/review UI (loopback only); the "Needs you now" card aggregates what requires the candidate — overdue decisions, due referral follow-ups, staged-but-unsubmitted applications, upcoming deadlines; the pipeline board has a search box — filter cards by req number (e.g. `R-2646399`), company, title, score, or any free term (`AI`, `staff`); multiple terms AND together (`GET /api/state?q=`) |
 
 ## Browser rig (local laya form-filling rig)
 
