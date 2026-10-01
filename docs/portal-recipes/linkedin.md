@@ -194,3 +194,56 @@ reposted by three CareerXperts / EV Search consultants. Do not read a page of 3
 posts as 3 opportunities; the genuinely-new product-company req is a minority.
 Filter every hit against the candidate's own prefs (role exclusions, location)
 before spending a card on it.
+
+## Wave-2 sends: the "Loading" race, and type-without-clicking (verified 2026-10-01, 5/5)
+
+**Goal:** send a batch of connection invites with notes, one at a time, on the
+`preload/custom-invite` flow.
+
+**Naive approach fails:** dispatching the deep-shadow "Add a note" `click()` immediately
+after `goto` reports success (`found: true`) while the dialog is still showing a
+`Loading` heading — the click is real but lands on a dialog that then re-renders, so the
+`domSnapshot` you read next still says `Loading` and the send looks stalled. Following the
+older recipe's "confirm the textbox with `getByRole('textbox')` and `click()` it" step can
+then **time out** on a 30s budget, because that textbox is already focused and Playwright's
+click never settles.
+
+**Working path** (cleanest order, 5/5 with no retries):
+
+1. `goto` `https://www.linkedin.com/preload/custom-invite/?vanityName=<handle>` inside a
+   `try/catch` — the navigation timeout is benign, the page still loads.
+2. `waitForTimeout` ~4.5s, then poll the snapshot until the dialog heading reads
+   **"Add a note to your invitation"** and the snapshot contains `/300` (i.e. it is past
+   `Loading`). The deep-shadow "Add a note" click is optional — the dialog frequently
+   reaches the note view on its own. If you do dispatch it, re-check the heading afterwards
+   rather than trusting `found: true`.
+3. **Type directly with `cua.type`. Do not click the textbox first.** In the settled note
+   view the textbox is already `[active]`; `cua.type` lands the text reliably and skips the
+   click that may hang.
+4. **Verify the live counter** — `…/300` via `evaluate` — and compare it to the intended
+   length before sending. This is the cheap guard against a truncated or doubled type.
+5. Deep-shadow dispatch the Send button (`"Send"` or `"Send invitation"`), then `waitForTimeout`
+   ~2.2s and confirm the dialog heading is gone.
+6. **Verify on `mynetwork/invitation-manager/sent/`**, not the dialog closing. Read
+   `People (N)` from the manager before the wave and after it: the delta must equal the
+   number of invites sent. Then confirm each note text appears verbatim under its name.
+
+**People search — the company pool is short; `keywords` finds the rest.** A
+`?currentCompany=["<id>"]&network=["S"]` search returns only ~9 second-degree people and
+further scrolling does **not** load more — three of five named targets were absent from it.
+Adding a `keywords` term to the same people-search URL finds them by name and still respects
+the network filter:
+
+```
+https://www.linkedin.com/search/results/people/?keywords=<urlencoded>&network=%5B%22S%22%5D
+```
+
+Read results from `domSnapshot()` (names, `/in/<handle>/`, headline, location, mutuals all
+appear cleanly there). `document.querySelectorAll("main li")` returns nothing useful — the
+result cards are not `li`-rooted, and `document.querySelectorAll('input…')` came back empty
+because the header search input is not reachable that way either. Split the snapshot on
+`\n    - link '` and regex per chunk if you need a structured list.
+
+**A `Follow` button on the search card does not mean Connect is unavailable.** Two targets
+showed `Follow` on their HighLevel search card and still accepted an invite through
+`preload/custom-invite`. Try the invite flow; don't pre-filter on the card's button.
