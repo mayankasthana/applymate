@@ -28,11 +28,26 @@ Enter are ignored by the overlay's React handler.
   → focus `div[role="textbox"][aria-label="Write a message…"]` →
   `document.execCommand("insertText", false, text)`. The draft persists
   server-side, so a failed send survives a reload of the compose URL.
+  `button[type=submit]` (Send) may read `disabled` immediately after the
+  insert — that is a stale read, not a dead draft; re-read a beat later (or
+  after a ~300 ms wait) before concluding anything.
 - **Sending:** use the hover-travel + click recipe (see Connection invites
   below): read the Send button's center via `evaluate`
   (`button[type=submit]` in the message form), `cua.move` through 3–4
   converging points with ~250–300 ms pauses, hold ~550 ms, then `cua.click`;
   verify the text moved from the compose box into the thread.
+- **Verifying a send — the false positive to avoid** (learned 2026-10-01): a
+  text match on the `domSnapshot` can hit the *compose box* (your own unsent
+  draft) and look like a delivered message. Verify with all three signals:
+  (1) a thread marker line "… sent the following message at <time>",
+  (2) the compose box `textContent` length now 0, (3) Send `disabled` again.
+  Overlay timestamps can render in a shifted timezone — the marker plus empty
+  compose is the ground truth, not the wall-clock time shown.
+- **Send click silently eaten** (2026-10-01, 2× on a fresh compose render):
+  hover-travel + dwell clicks left the draft in the compose box with no error.
+  The working fallback is the field-note remedy: `evaluate`-dispatch the
+  button's own `click()` (`document.querySelector('button[type="submit"]').click()`),
+  then re-verify with the three signals above.
 
 ## Connection invites ("Add a note to your invitation?")
 
