@@ -37,17 +37,18 @@ description: Tailor resume and cover letter for a tracked application from the d
      italics, no notes ("promoted within 15 months" goes in the description
      in parentheses); context paragraphs sit plain between dates and bullets,
      never italic. Company belongs to the line, not the heading.
-   - GenAI/agentic content always in: the candidate's lab work section, a
-     hackathon RAG win, summary clause, LangChain/RAG + agentic breadth
-     keywords. Engineering framing only; no returns/strategy/P&L, no
-     ML-modeling claims.
-   - The standing open-source list is candidate-specific and lives in the
-     workspace note `resume-standards`, not in this file.
+   - The candidate's own content list — which projects, labs, awards and
+     open-source work must appear, and the exact wording rules for each — is in
+     the workspace, not in this repo:
+     `node bin/applymate.ts profile note get resume-standards`
+     Read it and follow it literally. If it is missing, ask the candidate to
+     create it (`profile note set resume-standards <file.md>`) rather than
+     inventing content.
    - Ship as a 2-page A4 PDF: the stock `render` HTML has no print CSS — apply
      a print stylesheet and verify the page count before showing the PDF.
-   - Upload/submit under a generic filename (`Resume.pdf`) —
-     never the target company/role in the filename; recruiters see it.
-     Per-company names are for the private dossier copies only.
+   - Upload/submit under a generic filename (candidate's name only) — never the
+     target company/role in the filename; recruiters see it. Per-company names
+     are for the private dossier copies only.
 5. Register artifacts:
    - `node bin/applymate.ts app artifact <id> resume applications/<id>/resume.md`
    - `node bin/applymate.ts app artifact <id> coverLetter applications/<id>/cover-letter.md`

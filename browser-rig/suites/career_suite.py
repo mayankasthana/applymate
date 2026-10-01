@@ -31,11 +31,11 @@ TASKS = [
      "Open the job posting titled 'Administrative Business Partner'.",
      lambda u, t, x: "ac978161" in u or "Administrative Business Partner" in t),
     ("career-formy-form", "https://formy-project.herokuapp.com/form",
-     "Fill the job application form: first name Mayank, last name Tester, job title Software Engineer, "
+     "Fill the job application form: first name Alex, last name Tester, job title Software Engineer, "
      "education College, sex Male, experience 2-4, date 09/28/2026, then submit the form.",
      lambda u, t, x: "successfully submitted" in x.lower()),
     ("career-demoqa-form", "https://demoqa.com/automation-practice-form",
-     "Fill the student practice form fields one by one: first name Mayank, last name Tester, email aja@example.com, "
+     "Fill the student practice form fields one by one: first name Alex, last name Tester, email aja@example.com, "
      "gender Male, mobile 5551234567, hobbies Music, current address 1 Test Way, Testville, CA 90210, then submit the form.",
      lambda u, t, x: "Thanks for submitting the form" in x),
 ]

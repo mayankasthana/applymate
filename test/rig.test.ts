@@ -27,7 +27,7 @@ async function run(argv: string[], root: string) {
 test("rig spec builds a task spec from stored answers into workspace/rig/", async () => {
   await withTmpDir(async (root) => {
     await run(["init"], root);
-    assert.equal((await run(["answers", "set", "First name", "Mayank"], root)).code, 0);
+    assert.equal((await run(["answers", "set", "First name", "Alex"], root)).code, 0);
     assert.equal((await run(["answers", "set", "Phone number", "5551234567"], root)).code, 0);
 
     const res = await run(["rig", "spec", "--name", "app-42"], root);
@@ -38,13 +38,13 @@ test("rig spec builds a task spec from stored answers into workspace/rig/", asyn
     assert.equal(spec.name, "app-42");
     assert.equal(spec.suppress_enter, true);
     assert.deepEqual(spec.field_map, [
-      ["first name", "Mayank"],
+      ["first name", "Alex"],
       ["mobile|phone", "5551234567"],
     ]);
     // stage mode: no success text, DONE gated on the mapped fields instead
     assert.equal(spec.done_when_text, undefined);
     assert.deepEqual(spec.required, [
-      { field: "first name", equals: "Mayank" },
+      { field: "first name", equals: "Alex" },
       { field: "mobile|phone", equals: "5551234567" },
     ]);
   });
@@ -62,10 +62,10 @@ test("rig spec --submit requires --success-text", async () => {
 test("rig spec candidateName preference fills the first-name field", async () => {
   await withTmpDir(async (root) => {
     await run(["init"], root);
-    await run(["prefs", "set", "candidateName", "Mayank"], root);
+    await run(["prefs", "set", "candidateName", "Alex"], root);
     await run(["rig", "spec", "--name", "pref-only", "--out", "spec-out.json"], root);
     const spec = JSON.parse(await readFile(join(root, "spec-out.json"), "utf8"));
-    assert.deepEqual(spec.field_map, [["first name", "Mayank"]]);
+    assert.deepEqual(spec.field_map, [["first name", "Alex"]]);
   });
 });
 

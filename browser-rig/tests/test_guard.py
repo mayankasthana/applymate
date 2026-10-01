@@ -28,8 +28,8 @@ class Fixture:
 
 
 FORMY_SPEC = {
-    "field_map": [["first name", "Mayank"], ["job title", "Software Engineer"]],
-    "required": [{"field": r"first name", "equals": "Mayank"}],
+    "field_map": [["first name", "Alex"], ["job title", "Software Engineer"]],
+    "required": [{"field": r"first name", "equals": "Alex"}],
     "suppress_enter": True,
     "suppress_click": [r"^Form$"],
     "done_when_text": r"successfully submitted",
@@ -51,24 +51,24 @@ class SuppressEnterTest(unittest.TestCase):
 
 class DoneGateTest(unittest.TestCase):
     def test_done_hidden_until_success_text(self):
-        f = Fixture([element("First name", value="Mayank")])
+        f = Fixture([element("First name", value="Alex")])
         apply_spec(f.operations, f.elements, "The form was successfully submitted!", f.targets,
                    spec={"done_when_text": r"successfully submitted"})
         self.assertIn("DONE", f.operations)
 
     def test_done_hidden_when_fields_filled_but_not_submitted(self):
         # a filled form alone must not unlock DONE — the submit still has to happen
-        f = Fixture([element("First name", value="Mayank")])
+        f = Fixture([element("First name", value="Alex")])
         apply_spec(f.operations, f.elements, "", f.targets, spec=FORMY_SPEC)
         self.assertNotIn("DONE", f.operations)
 
     def test_done_gated_on_required_fields_without_success_text(self):
         # fill-without-submit flow: DONE unlocks when every required field holds
-        spec = {"required": [{"field": r"first name", "equals": "Mayank"}]}
+        spec = {"required": [{"field": r"first name", "equals": "Alex"}]}
         f = Fixture([element("First name", value="")])
         apply_spec(f.operations, f.elements, "", f.targets, spec=spec)
         self.assertNotIn("DONE", f.operations)
-        f2 = Fixture([element("First name", value="Mayank")])
+        f2 = Fixture([element("First name", value="Alex")])
         apply_spec(f2.operations, f2.elements, "", f2.targets, spec=spec)
         self.assertIn("DONE", f2.operations)
 
@@ -104,16 +104,16 @@ class SuppressTypeTest(unittest.TestCase):
 
 class FieldMapTest(unittest.TestCase):
     def test_satisfied_field_hidden_unsatisfied_kept(self):
-        f = Fixture([element("First name", value="Mayank"), element("First name", value="")])
+        f = Fixture([element("First name", value="Alex"), element("First name", value="")])
         apply_spec(f.operations, f.elements, "", f.targets,
-                   spec={"field_map": [["first name", "Mayank"]]})
+                   spec={"field_map": [["first name", "Alex"]]})
         self.assertNotIn("1", f.targets["TYPE_TEXT"])
         self.assertIn("2", f.targets["TYPE_TEXT"])
 
     def test_type_op_dropped_when_every_field_satisfied(self):
-        f = Fixture([element("First name", value="Mayank")])
+        f = Fixture([element("First name", value="Alex")])
         apply_spec(f.operations, f.elements, "", f.targets,
-                   spec={"field_map": [["first name", "Mayank"]]})
+                   spec={"field_map": [["first name", "Alex"]]})
         self.assertNotIn("TYPE_TEXT", f.operations)
 
     def test_select_hidden_when_current_value_matches(self):

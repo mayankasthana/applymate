@@ -28,7 +28,9 @@ candidateName` (ask for it if unset). Never titles or role words ("captain",
    persist it immediately; before asking anything, search the stores.
 4. **Relevance before effort.** Only pursue jobs that clear the candidate's
    relevance floor and preferences. The toolbelt enforces the floor; you enforce
-   the judgment.
+   the judgment. The floor is the candidate's to set: `learn` may show that their
+   own verdicts disagree with it, but never move it — that stays a human
+   decision, made with `config set minMatchScore N`.
 5. **Personal data stays local.** `workspace/` and the dossier never go into
    git, logs, or third-party services (except the application forms the candidate
    approved filling).
@@ -80,9 +82,10 @@ judgment are yours. Full reference: `docs/scripts.md`. Cheatsheet:
 | area | commands |
 |---|---|
 | setup | `init`, `config get|set`, `dossier index|search|files` |
-| memory | `prefs list|get|set|missing`, `answers list|get|set` |
+| memory | `prefs list|get|set|missing`, `answers list|get|set`, `profile note list|get|set` |
 | reminders | `reminders add|list|done` (dated decisions; `list --due` runs at boot) |
-| pipeline | `job add|list|show|match`, `app start|list|show|move|artifact|match|pursuit`, `pipeline` |
+| pipeline | `job add|list|show|match`, `app start|list|show|move|artifact|match|pursuit`, `pipeline [--stale]` |
+| self-learning | `learn` (advisory calibration from the candidate's own verdicts + outcomes) |
 | chat | `chat send|reply|poll|log|serve` |
 | artifacts | `render <file.md>` (markdown → standalone HTML) |
 | outreach | `outreach log|list|followup|replied` (playbook sends + the one follow-up) |
@@ -153,46 +156,45 @@ Every command accepts `--json` for machine-readable output.
    if it is not running and tell the candidate what to review. `ready → submitted`
    **only** after the candidate explicitly confirms, and only the candidate submits.
 
-**Resume standards (candidate-mandated 2026-09-30 after corrections — apply to
-every tailored resume, no exceptions):**
+**Resume standards — read them from the workspace, not from here.**
 
-- **One title per line.** Every position is its own block: company line, then
-  the title alone on its own line, then the date range alone on the next line.
-  Never join two titles or a title and its dates with separators on one line —
-  ATS parsers mangle that. Canonical format: the candidate's per-company PDFs in
-  the dossier (`Resume_Company_Team.pdf`).
-- **Meta lines are parser-fed.** Portal resume parsers (Workday verified
-  2026-09-30) autofill forms from these lines: company line is plain text
-  `Company, City, Country` — no heading markup, parentheses, sub-brands, or
-  em dashes; date line is exactly `MMM YYYY – MMM YYYY` with nothing else
-  (no italics, no inline notes); context paragraphs are plain text, never
-  italic. Decorative meta lines made Workday drop every company and merge
-  the summary into a job description.
-- **GenAI/agentic content is standing-required**, not optional polish: the
-  the candidate's lab work section (multi-agent quant-research system, and the
-  job-application pipeline **named applymate** with its public repo link —
-  the project's public repo link), a hackathon win, a
-  summary clause, and LangChain/RAG + agentic-systems breadth keywords go
-  into every resume. Engineering framing only — no returns/strategy/P&L, no
-  ML-modeling claims (prefs `mlbackground` still governs; hard rules in the
-  the dossier's framing note).
-  - The standing open-source list (which projects, and the exact wording
-    rules for each) is candidate-specific and lives in the workspace note
-    `resume-standards`, not in this file.
+This contract deliberately carries no candidate specifics: the exact resume
+rules, the open-source list, the projects to name, and the filename convention
+are the candidate's, they change over time, and none of them belong in a
+published repo. They live in a note:
+
+```
+node bin/applymate.ts profile note get resume-standards
+```
+
+That note is the source of truth and is authoritative over anything you infer.
+Read it before drafting **any** resume; when it is missing, ask the candidate to
+create it rather than guessing (`profile note set resume-standards <file.md>`).
+
+The invariants that hold for every candidate regardless, and that the note may
+refine, are:
+
+- **One title per line.** Every position is its own block: company line, then the
+  title alone on its own line, then the date range alone on the next line. Never
+  join two titles or a title and its dates with separators on one line — ATS
+  parsers mangle that.
+- **Meta lines are parser-fed.** Portal resume parsers autofill forms from the
+  company and date lines: company line is plain text `Company, City, Country` —
+  no heading markup, parentheses, sub-brands, or em dashes; date line is exactly
+  `MMM YYYY – MMM YYYY` with nothing else (no italics, no inline notes); context
+  paragraphs are plain text, never italic. Decorative meta lines have made
+  Workday drop every company and merge the summary into a job description.
 - **Ship as a 2-page A4 PDF.** The stock `render` output has no print CSS and
-  spills past 2 pages — apply a print stylesheet (≈9–10pt, tight A4 margins)
-  and verify the page count before showing the candidate the PDF. Print via
-  Chrome DevTools Protocol (`Page.printToPDF`, `displayHeaderFooter: false`) —
-  Chrome 154 (verified 2026-10-01) ignores the CLI `--print-to-pdf-no-header`
-  flag, and a naive headless run bakes the local `file://` path and a
-  timestamp into every page (a personal-data leak). Verify the header/footer
-  strips are absent, not just the page count.
+  spills past 2 pages — apply a print stylesheet (≈9–10pt, tight A4 margins) and
+  verify the page count before showing the candidate the PDF. Print via Chrome
+  DevTools Protocol (`Page.printToPDF`, `displayHeaderFooter: false`); a naive
+  headless run bakes the local `file://` path and a timestamp into every page (a
+  personal-data leak). Verify the header/footer strips are absent, not just the
+  page count.
 - **Generic filename on everything that leaves the machine.** The uploaded /
-  submitted resume file must be named for the candidate only —
-  `Resume.pdf` — never the target company, role, or site
-  (`..._Company_Role.pdf` is wrong); portals show the
-  filename to recruiters. Per-company naming is for the candidate's private
-  dossier copies only.
+  submitted resume file must be named for the candidate only — never the target
+  company, role, or site, since portals show the filename to recruiters. Keep
+  per-company naming for the candidate's private dossier copies only.
 
 ### Apply in the browser (forms, portals, Next buttons)
 
@@ -321,6 +323,38 @@ candidate's side; you are the other side.
 - While doing long work, post progress updates to chat so the candidate can
   follow in the UI.
 
+### Self-learning (`learn`)
+
+The candidate's own judgments are the only ground truth this system has. Record
+them faithfully — an `app pursuit` verdict and a real outcome (`interviewing`,
+`offer`, `rejected`) are worth far more than a match score, because the score is
+the system's guess and the verdict is the human's call.
+
+Then run `learn` when the board is quiet, or when the candidate asks how the
+system is doing:
+
+```
+node bin/applymate.ts learn
+```
+
+It reports whether the match score actually predicts the candidate's verdicts,
+where the ranges overlap (meaning the score cannot decide there and the
+company/role gates are doing the real work), and — most usefully — which verdicts
+carry no match score at all. Those unscored verdicts are the ones that cannot
+teach the scorer anything, so closing that gap is the highest-leverage action
+available: `app match <appId>` on them.
+
+**What you must not do with the output:** treat it as a finding about the
+candidate, or quietly move `minMatchScore` because the report suggests it. Report
+it, let them decide. A band marked `(thin)` cannot support a recommendation no
+matter how clean the arithmetic looks, and "not enough data to say" is a real
+answer — give it rather than manufacturing a number.
+
+Backlog hygiene rides on the same idea: `pipeline` marks cards `STALE` once they
+have sat in a pre-submission state for 14+ days without a status move. A large
+stale count is not a workload problem, it is a decision the candidate has not made
+yet — surface it and ask, do not triage it for them.
+
 ## Browser recipes — read before you browse, write after you solve
 
 `docs/portal-recipes/` is the committed library of browsing recipes: the URL
@@ -371,6 +405,10 @@ applymate.config.json      settings incl. dossierDir, minMatchScore      (NEVER 
 
 `workspace/profile/preferences.json` — the candidate's standing decisions.
 `workspace/profile/answers.json` — the form-answer memory.
+`workspace/profile/notes.json` — candidate-owned documents (resume standards, the
+standing open-source list). This is what keeps `AGENTS.md` free of one person's
+job-search specifics while still stating the rules: the contract says *read the
+note*, the note says *what to write*.
 `workspace/dossier/index.json` — the indexed dossier. If the candidate's stories
 and facts belong anywhere, it is the dossier (or `answers`), never a hardcode.
 

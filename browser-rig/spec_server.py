@@ -14,7 +14,7 @@ Specs come from builtin benchmark entries plus, when given, a JSON file:
 
     python3 spec_server.py [--specs specs.json] [--port 30000]
 
-    {"active": "my-app", "specs": {"my-app": {"field_map": [["first name", "Mayank"]], ...}}}
+    {"active": "my-app", "specs": {"my-app": {"field_map": [["first name", "Alex"]], ...}}}
 """
 import argparse
 import json
@@ -27,13 +27,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 BUILTIN_SPECS = {
     "formy": {
         "field_map": [
-            [r"first name", "Mayank"],
+            [r"first name", "Alex"],
             [r"last name", "Tester"],
             [r"job title", "Software Engineer"],
             [r"date", "09/28/2026"],
         ],
         "required": [
-            {"field": r"first name", "equals": "Mayank"},
+            {"field": r"first name", "equals": "Alex"},
             {"field": r"last name", "equals": "Tester"},
             {"field": r"job title", "equals": "Software Engineer"},
             {"field": r"experience", "equals": "2-4"},
@@ -44,14 +44,14 @@ BUILTIN_SPECS = {
     },
     "demoqa": {
         "field_map": [
-            [r"first name", "Mayank"],
+            [r"first name", "Alex"],
             [r"last name", "Tester"],
             [r"user email|example\.com", "aja@example.com"],
             [r"mobile|phone", "5551234567"],
             [r"current address|address", "1 Test Way, Testville, CA 90210"],
         ],
         "required": [
-            {"field": r"first name", "equals": "Mayank"},
+            {"field": r"first name", "equals": "Alex"},
             {"field": r"last name", "equals": "Tester"},
             {"field": r"example\.com", "equals": "aja@example.com"},
             {"field": r"mobile", "equals": "5551234567"},
