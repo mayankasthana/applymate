@@ -300,3 +300,43 @@ because the header search input is not reachable that way either. Split the snap
 **A `Follow` button on the search card does not mean Connect is unavailable.** Two targets
 showed `Follow` on their HighLevel search card and still accepted an invite through
 `preload/custom-invite`. Try the invite flow; don't pre-filter on the card's button.
+
+## Inbox triage — the Unread chip sticks, and it hides today's threads (verified 2026-10-01)
+
+**Reading the inbox for a completeness check.** The `Unread` filter chip opens fine with the
+mousedown/mouseup/click dispatch, but it is **sticky across a soft client-side re-render**: after opening
+a thread the list stays filtered to unread even though the chip UI reads as unselected, and a `tab.reload()`
+does **not** clear it. Today's active threads then look like they do not exist — on this run the whole
+"Focused" list had dropped to the 9 stale unread threads (Sulbia, Shree, Prajna, Saurabh, Dharti, Maryna,
+Shruti, Robin, Nidhi) while Shivam Sinha and Nikita Bathla, both from tonight, were missing entirely.
+
+**Working path:** drive the filter with a full `tab.goto("https://www.linkedin.com/messaging/")` instead of
+reload or chip clicks — that is the one navigation that reliably returns the Focused list. Verify before
+trusting any inbox read:
+
+```js
+Array.from(document.querySelectorAll('div.msg-conversation-listitem__link')).map(el => {
+  const h = el.querySelector('h3'), p = el.querySelector('p');
+  return (h ? h.innerText.trim() : '?') + ' :: ' + (p ? p.innerText.trim().replace(/\s+/g,' ') : '');
+})
+```
+
+The first entry being tonight's newest thread is the confirmation that the Focused list is actually loaded.
+
+**The conversation-card preview settles most threads without opening them.** A preview beginning `You:`
+means nobody owes a reply. `"InMail • <subject>"` is an untriaged inbound pitch (recruiter, no answer
+required yet), and a card carrying a `generic "N unread message"` node is the one that actually needs opening.
+
+**Message composer file attachment (verified 2026-10-01).** The `Attach a file` button's hidden input is a
+plain, non-shadow `input[type=file]` and is reachable and correct:
+
+```
+input[type=file]#attachment-input-<n>   accept="image/*,.ai,.psd,.pdf,.doc,.docx,.ppt,.pptx,.pps,.ppsx,.xls,.xlsx,.txt,.eml,.mov,.mp4"
+```
+
+There are two such inputs per page — one `image/*` only, one the full document set — so **select by the
+`accept` that contains `.pdf`, not by index**. IAB's own file-chooser/`setFiles` path is
+`capability_unsupported`, so attaching needs the DataTransfer-injection route already proven on the Workday
+and SmartRecruiters upload widgets (see [workday.md](workday.md)), or the candidate attaching by hand. The
+input existing and being reachable is the part worth recording: it means a resume can be pushed into a
+LinkedIn message without the candidate doing it manually.
