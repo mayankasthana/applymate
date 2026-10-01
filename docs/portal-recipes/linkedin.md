@@ -136,3 +136,18 @@ but never lands — and stale UI (e.g. an old messaging bubble) can make a
 page look like a dialog is open when it is not. Trust the ARIA/dom snapshot
 over visuals, and re-verify the action's real state (the profile "Pending"
 flag, the invitation manager, the thread contents) before retrying.
+
+## Invite dialog mechanics (2026-10-01, 4/4 wave-2 sends)
+
+**`goto` on `preload/custom-invite` times out but the page loads.** Observed 2 of 4
+sends: `tab.goto` threw "Navigation timed out after 10000ms" while the dialog was
+actually open behind it. Do not retry the navigation — re-observe the same tab
+(`tab.url()` + `domSnapshot`); the dialog is usually there.
+
+**Clicking "Add a note" programmatically does not move focus into the textarea.**
+When the deep-shadow `click()` and the `cua.type` happen in the same call, the note
+never lands (counter stays `0/300`, Send stays disabled) even though the textarea
+opened. Working order: deep-shadow click "Add a note" → in a fresh call confirm the
+textbox via `getByRole("textbox")` (count 1) and `click()` it → `cua.type` the note
+→ confirm the live counter matches the intended length → dispatch the Send click.
+Verified 4/4 with the evaluator-dispatched Send on 2026-10-01.
