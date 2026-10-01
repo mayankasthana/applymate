@@ -64,6 +64,14 @@ export interface NoteFile {
   notes: Record<string, NoteRecord>;
 }
 
+/**
+ * Notes the agent needs before it can work. `resume-standards` is read before
+ * drafting any resume; without it the agent is told to ask rather than guess.
+ * Surfaced at boot so the gap is loud at session start instead of surfacing
+ * halfway through a draft, or — worse — silently after a fresh clone.
+ */
+export const RECOMMENDED_NOTE_NAMES: readonly string[] = ["resume-standards"];
+
 /** Keys the agent should ask about when unset — suggested, never assumed.
  *  `candidateName` comes first: how to address the candidate (first name). */
 export const RECOMMENDED_PREFERENCE_KEYS: readonly string[] = [
@@ -189,6 +197,12 @@ export class ProfileStore {
   async notes(): Promise<NoteRecord[]> {
     const file = await this.#loadNotes();
     return Object.values(file.notes).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** Recommended notes with no value yet — what the agent should ask about. */
+  async missingNotes(): Promise<string[]> {
+    const file = await this.#loadNotes();
+    return RECOMMENDED_NOTE_NAMES.filter((n) => !file.notes[normalizeNoteName(n)]);
   }
 
   // -- storage ------------------------------------------------------------------
