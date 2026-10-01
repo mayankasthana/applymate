@@ -51,6 +51,21 @@ Profile globs win over reference globs, so whitelist mode works: set
 Recommended keys (suggestions only, values always yours):
 `companyType`, `salaryFloor`, `workMode`, `locations`, `seniority`.
 
+### Notes (candidate-owned documents)
+
+The repo ships the *rules*; the facts behind them are the candidate's and live in
+`workspace/profile/notes.json` (gitignored). This is what lets `AGENTS.md` stay
+publishable without inlining one person's job-search specifics.
+
+| command | what it does |
+|---|---|
+| `profile note list` | Named notes with update times |
+| `profile note get <name>` | Print one note |
+| `profile note set <name> <file.md>` | Store/replace a note from a markdown file |
+
+`resume-standards` is the one the resume workflow reads. When it is missing, ask
+the candidate to create it — never guess its contents.
+
 ## Answers (application-form memory)
 
 | command | what it does |
@@ -88,6 +103,14 @@ interviewing → offer`; `closed` from any non-terminal; `rejected` from
 submitted/interviewing. `ready` requires a resume artifact. Nothing moves to
 `submitted` except by the candidate's instruction.
 
+**Backlog decay.** `pipeline` marks cards `STALE` and prints how many there are
+once they have sat in a pre-submission state (`discovered`, `matched`,
+`tailoring`, `ready`) for 14+ days without a *status move* — scoring a job or
+attaching a verdict does not reset the clock, only `app move` does.
+`pipeline --stale` shows just those; `--stale-days N` moves the threshold.
+Applications already handed over (`submitted` and beyond) are never stale: that
+wait belongs to the employer, not the agent.
+
 ## Outreach (message-playbook bookkeeping)
 
 The drafting method lives in the `outreach-playbook` skill; the candidate's
@@ -124,6 +147,41 @@ it; when it's handled (or the deadline moves), retire it.
 | `reminders done <id> [--at iso]` | Record the decision acted on (keeps the first done time) |
 
 Records live in `workspace/reminders/<id>.json` (personal, gitignored).
+
+## Learn (self-learning — advisory only)
+
+`learn` reads what the candidate actually decided — `app pursuit` verdicts, match
+reports, and how far applications got — and reports where the scorer agrees with
+them and where it does not.
+
+| command | what it does |
+|---|---|
+| `learn [--sample n] [--limit n] [--json]` | Calibration report; `--sample` moves the confidence threshold, `--limit` caps the ids listed per suggestion |
+
+**It never changes anything.** No score, no verdict, no `minMatchScore`. The
+relevance floor is the candidate's stated bar (prime directive 4); the system can
+show that the bar disagrees with their own judgments, but moving it stays a human
+decision made explicitly with `config set minMatchScore N`.
+
+What it reports:
+
+- **Bands** — verdict × match score (n, scored, mean, median, range). A band with
+  fewer than `--sample` (default 8) scored examples is marked `(thin)` and cannot
+  support a recommendation.
+- **Separation vs overlap** — when every scored green sits above every scored
+  non-green, the score decides and a floor change is worth suggesting. When the
+  ranges intersect, it says so and proposes nothing, because in that band the
+  company/role gates are doing real work the score cannot see.
+- **Coverage gap** — verdicts recorded without a match score. These are the
+  highest-leverage fix, because a verdict that was never scored cannot teach the
+  scorer anything.
+- **Outcome funnel** — submitted / interviewed / offered / rejected, overall and
+  broken down by verdict, so pursuit can be checked against what actually
+  happened.
+
+Confidence (`low` / `medium` / `high`) is a function of scored evidence, not of
+how confident the arithmetic feels. A report that cannot conclude says so instead
+of producing a number.
 
 ## Chat
 

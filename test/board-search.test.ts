@@ -16,6 +16,7 @@ function card(overrides: Partial<AppSummary>): AppSummary {
     pursuit: null,
     resumeRef: null,
     updatedAt: "2026-09-30T00:00:00.000Z",
+    lastMovedAt: "2026-09-30T00:00:00.000Z",
     jobUrl: null,
     ...overrides,
   };

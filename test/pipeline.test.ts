@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
-import { PipelineService, RelevanceError } from "../src/services/pipeline.ts";
+import { PipelineService, RelevanceError, isStale, daysSince } from "../src/services/pipeline.ts";
 import { JsonCollection, type Collection } from "../src/adapters/json-collection.ts";
 import { Job, Application, type Job as JobRecord, type Application as AppRecord } from "../src/domain.ts";
 import { withTmpDir } from "./helpers.ts";
@@ -307,5 +307,46 @@ test("setPursuit overwrites a previous verdict and validates input", async () =>
     assert.equal(updated.pursuit?.note, "ML-titled role");
     assert.rejects(() => svc.setPursuit(app.id, "mauve" as never), /pursuit verdict/i);
     await assert.rejects(() => svc.setPursuit("app-none", "green"), (err: unknown) => (err as { code?: string }).code === "NOT_FOUND");
+  });
+});
+
+// -- staleness ----------------------------------------------------------------
+
+test("isStale flags backlog cards untouched past the threshold", () => {
+  const old = { status: "discovered" as const, lastMovedAt: "2026-09-01T00:00:00.000Z" };
+  const now = Date.parse("2026-10-01T00:00:00.000Z");
+  assert.equal(isStale(old, { now }), true);
+  assert.equal(isStale({ ...old, lastMovedAt: "2026-09-25T00:00:00.000Z" }, { now }), false);
+  assert.equal(isStale(old, { now, staleDays: 90 }), false);
+});
+
+test("isStale ignores applications already handed to the employer", () => {
+  const old = { status: "submitted" as const, lastMovedAt: "2026-01-01T00:00:00.000Z" };
+  const now = Date.parse("2026-10-01T00:00:00.000Z");
+  // a long silence after submitting is the employer's latency, not agent rot
+  for (const status of ["submitted", "interviewing", "offer", "rejected", "closed"] as const) {
+    assert.equal(isStale({ status, lastMovedAt: old.lastMovedAt }, { now }), false, status);
+  }
+});
+
+test("daysSince never goes negative on a future timestamp", () => {
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  assert.equal(daysSince(future), 0);
+  assert.equal(daysSince(null), null);
+  assert.equal(daysSince("not-a-date"), null);
+});
+
+test("the board reports lastMovedAt from status history, not the last write", async () => {
+  await withTmpDir(async (root) => {
+    const svc = await makeService(root);
+    const job = await svc.addJob(JOB_INPUT);
+    const app = await svc.startApplication(job.id);
+    await svc.move(app.id, "closed", { at: "2026-09-05T00:00:00.000Z", });
+    // a later write that is not a status move must not reset the clock
+    const touched = await svc.setPursuit(app.id, "green", { at: "2026-09-30T00:00:00.000Z" });
+    const card = (await svc.pipeline()).closed[0]!;
+    assert.equal(card.lastMovedAt, "2026-09-05T00:00:00.000Z");
+    assert.equal(card.updatedAt, touched.updatedAt);
+    assert.notEqual(card.lastMovedAt, card.updatedAt);
   });
 });
