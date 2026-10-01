@@ -49,6 +49,41 @@ Enter are ignored by the overlay's React handler.
   button's own `click()` (`document.querySelector('button[type="submit"]').click()`),
   then re-verify with the three signals above.
 
+**Opening a different conversation in the inbox (verified 2026-10-01, 3/3):**
+the conversation-list card is a `div.msg-conversation-listitem__link[tabindex=0]`
+(no anchor, no href — the conversation id is not in the DOM, so you cannot build
+a thread URL yourself). Three normal approaches all fail:
+
+- `getByRole('heading', { name: 'Ankita Sen' }).click()` — times out. The list
+  never stops re-rendering (its own a11y text says "messaging items continuously
+  update"), so Playwright's actionability checks never settle.
+- `dom_cua.click` on the row's node ref — lands without error, leaves
+  `document.activeElement` on `BODY`.
+- `cua.click` at the row title's coordinates — hover state shows, nothing opens.
+
+What works is dispatching a real mouse-event sequence onto the link element:
+
+```js
+const h = Array.from(document.querySelectorAll('h3')).find(x => x.innerText.trim() === 'Ankita Sen');
+const link = h.closest('[class*="listitem__link"]');      // the h3's card link
+const o = { bubbles: true, cancelable: true, view: window };
+link.dispatchEvent(new MouseEvent('mousedown', o));
+link.dispatchEvent(new MouseEvent('mouseup', o));
+link.dispatchEvent(new MouseEvent('click', o));
+```
+
+Then wait ~3s and confirm `/messaging/thread/<id>/` in the URL actually changed.
+All three dispatched events are needed; a bare `.click()` alone did not switch
+threads in testing. The same evaluate-then-dispatch path opens the toolbar
+filter chips (`Unread`, `InMail`, `Starred`) too.
+
+**Reading the inbox for a message check:** the conversation preview shows the
+*last* message in the thread, so a preview beginning `You:` means nobody owes a
+reply — that alone settles most threads without opening them. The `Unread` chip
+is the completeness check: it lists every thread with unread messages, including
+old ones that were never triaged. Fold in the `InMail` chip to catch agency and
+recruiter pitches that were read but never logged.
+
 ## Connection invites ("Add a note to your invitation?")
 
 **Goal:** send a connection invite with a note.
