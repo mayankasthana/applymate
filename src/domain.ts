@@ -369,6 +369,75 @@ export function isFollowUpDue(msg: OutreachMessage, now = Date.now()): boolean {
   return now >= followUpDueAt(msg.sentAt);
 }
 
+// ---------------------------------------------------------------------------
+// Reminders (dated decisions that must resurface — a deadline in prose is a
+// deadline nobody sees; these are read by the boot sequence)
+// ---------------------------------------------------------------------------
+
+export interface Reminder {
+  id: string;
+  /** The decision/action that comes due — imperative and self-contained. */
+  title: string;
+  /** When it should resurface (ISO date or full ISO timestamp). */
+  dueAt: string;
+  /** Linked application, when the reminder belongs to one. */
+  appId: string | null;
+  /** Context a future session needs: why this exists, what "done" looks like. */
+  note: string | null;
+  createdAt: string;
+  /** Set via `reminders done`. */
+  doneAt: string | null;
+}
+
+export interface ReminderInput {
+  id?: string;
+  title?: unknown;
+  dueAt?: unknown;
+  appId?: unknown;
+  note?: unknown;
+  createdAt?: string;
+}
+
+export class Reminder {
+  static create(input: ReminderInput, { now = new Date().toISOString() } = {}): Reminder {
+    const dueAt = str(input.dueAt);
+    if (!dueAt) throw new DomainError("reminder is missing required field: dueAt");
+    if (Number.isNaN(Date.parse(dueAt))) {
+      throw new DomainError(`reminder dueAt must be a parseable date (ISO), got: ${dueAt}`);
+    }
+    const rem: Reminder = {
+      id: input.id ?? makeId("rem", str(input.title)),
+      title: str(input.title),
+      dueAt,
+      appId: strOr(input.appId, null),
+      note: strOr(input.note, null),
+      createdAt: input.createdAt ?? now,
+      doneAt: null,
+    };
+    if (!rem.title) throw new DomainError("reminder is missing required field: title");
+    return Reminder.validate(rem);
+  }
+
+  static validate(rem: Reminder): Reminder {
+    if (!str(rem.title)) throw new DomainError("reminder is missing required field: title");
+    if (!str(rem.dueAt) || Number.isNaN(Date.parse(rem.dueAt))) {
+      throw new DomainError(`reminder dueAt must be a parseable date (ISO), got: ${String(rem.dueAt)}`);
+    }
+    if (!str(rem.id)) throw new DomainError("reminder is missing required field: id");
+    if (!str(rem.createdAt)) throw new DomainError("reminder is missing required field: createdAt");
+    rem.appId = strOr(rem.appId, null);
+    rem.note = strOr(rem.note, null);
+    rem.doneAt = strOr(rem.doneAt, null);
+    return rem;
+  }
+}
+
+/** A reminder is due once its time has arrived and it isn't done. */
+export function isReminderDue(rem: Reminder, now = Date.now()): boolean {
+  if (rem.doneAt) return false;
+  return now >= Date.parse(rem.dueAt);
+}
+
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }

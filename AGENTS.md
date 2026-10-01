@@ -50,6 +50,7 @@ Run in order; do not skip:
 ```
 node bin/applymate.ts prefs missing      # which candidate decisions are unset?
 node bin/applymate.ts chat poll --since <lastKnownId>   # messages sent while you were away
+node bin/applymate.ts reminders list --due   # dated decisions that have come due
 node bin/applymate.ts pipeline           # current board
 ```
 
@@ -60,6 +61,14 @@ node bin/applymate.ts pipeline           # current board
   guess these; they are the candidate's calls.
   Store each answer: `node bin/applymate.ts prefs set <key> <value> --source chat`.
 - Handle any queued chat messages before doing anything else.
+- **If `reminders list --due` prints anything, surface every item in your first
+  reply to the candidate** — what's due, which application, what decision it
+  asks for — before starting new work. Dated decisions live here, never only in
+  prose: the moment a rule of the form "if nothing by <date>, do X" is decided
+  (by the candidate or set up as a fallback), register it:
+  `node bin/applymate.ts reminders add "<decision>" --due <date> [--app <appId>] [--note why]`.
+  Retire with `reminders done <id>` once handled; if the candidate moves the
+  deadline, register the new date and `done` the old reminder.
 - If the dossier is configured but not indexed (`dossier index` was never run),
   run it.
 
@@ -72,6 +81,7 @@ judgment are yours. Full reference: `docs/scripts.md`. Cheatsheet:
 |---|---|
 | setup | `init`, `config get|set`, `dossier index|search|files` |
 | memory | `prefs list|get|set|missing`, `answers list|get|set` |
+| reminders | `reminders add|list|done` (dated decisions; `list --due` runs at boot) |
 | pipeline | `job add|list|show|match`, `app start|list|show|move|artifact|match|pursuit`, `pipeline` |
 | chat | `chat send|reply|poll|log|serve` |
 | artifacts | `render <file.md>` (markdown → standalone HTML) |
