@@ -112,3 +112,50 @@ Chrome in-app browser (Playwright + dom_cua + cua surfaces).
   empty main region).
 - Email round-trips (reset links) are readable read-only via the candidate's mailbox if the
   candidate has approved that channel; never guess token URLs.
+
+## Text inputs commit only with trusted keystrokes (verified 2026-10-01, JioStar tenant)
+
+- Goal: get a value into a Workday text input so it survives validation and submit.
+- Naive approach fails: `locator.fill(value)` then blur, then submit. The text is visibly in the
+  field and the inline error clears, but submit re-raises "The field X is required and must have
+  a value" — validation reads framework state, not the DOM value. Worse, dispatching synthetic
+  `input`/`change`/`focusout` events from `evaluate()` clears the error while permanently
+  desyncing React's value tracker, leaving the Save button disabled with no visible error and no
+  way to recover without a page reload.
+- Working path (trusted input, no synthetic events):
+  1. `cua.click({x, y})` at the field's centre — a real user-level click, so the framework registers focus.
+  2. `locator.evaluate(el => el.select())` — **required**; `ControlOrMeta+A` and `CTRL+A` do not
+     select in these inputs, so typing appends and yields `65000006500000`.
+  3. `cua.type({text})` with a delay. Per-character `locator.press("6")` does not register at all;
+     `type()` does.
+  4. `cua.keypress({keys:["TAB"]})` to blur onto another control.
+- `cua.keypress` takes `keys` as an **array**, e.g. `{keys:["CTRL","A"]}` — a bare string is rejected.
+- `fill()` on some widgets (Workday date-of-birth segments) throws a clipboard error
+  ("Active element is no longer the expected input target").
+- Checkboxes: a coordinate click on the 24x24 square does **not** toggle. `check({force: true})` does.
+
+## Drafts restart at step 1 — never reload mid-flow (verified 2026-10-01, JioStar tenant)
+
+- Goal: complete a multi-step application.
+- Naive approach fails: reloading the page, or leaving via "Continue Application", discards every
+  edit from step 2 onward and re-enters the flow at step 1. On the JioStar tenant this silently
+  discarded a re-uploaded resume, four rewritten role descriptions, and an already-saved
+  compensation figure.
+- Working path: finish the whole flow in one continuous session. Verify progress by reading the
+  stepper ("current step N of M") after every Save rather than assuming the click landed.
+- Editing work-experience role descriptions does not survive a reload — the block re-hydrates from
+  the candidate profile, which only updates on final submit. There is no per-entry Save; the only
+  control is the page-level Save and Continue.
+- Verified: 2026-10-01, once (JioStar, JR10079).
+
+## Widgets that are not automatable in the in-app browser (verified 2026-10-01, JioStar tenant)
+
+- **Date of birth segments** — all three `dateSection{Month,Day,Year}-input` elements measure 0x0 px
+  and carry `tabindex="-1"`. Clicking the visible placeholder DIVs does nothing; the Calendar
+  button opens a grid containing zero `[role="gridcell"]`. Hand off to the candidate.
+- **Multiselect typeaheads** (Citizenship Status, Field of Study, Skills) — typing a term renders
+  no `[role="option"]` at all and "0 items selected" persists. The react-virtualized grid does not
+  lay out in this webview. Hand off to the candidate.
+- Symptom of both: the field looks present in the ARIA snapshot but cannot be driven.
+- Note the phone field re-displays with a leading 0 after reload on the India profile; that is the
+  tenant's own mask, not corrupt data — do not "fix" it.
