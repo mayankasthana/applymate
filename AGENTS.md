@@ -181,7 +181,12 @@ every tailored resume, no exceptions):**
     `resume-standards`, not in this file.
 - **Ship as a 2-page A4 PDF.** The stock `render` output has no print CSS and
   spills past 2 pages — apply a print stylesheet (≈9–10pt, tight A4 margins)
-  and verify the page count before showing the candidate the PDF.
+  and verify the page count before showing the candidate the PDF. Print via
+  Chrome DevTools Protocol (`Page.printToPDF`, `displayHeaderFooter: false`) —
+  Chrome 154 (verified 2026-10-01) ignores the CLI `--print-to-pdf-no-header`
+  flag, and a naive headless run bakes the local `file://` path and a
+  timestamp into every page (a personal-data leak). Verify the header/footer
+  strips are absent, not just the page count.
 - **Generic filename on everything that leaves the machine.** The uploaded /
   submitted resume file must be named for the candidate only —
   `Resume.pdf` — never the target company, role, or site
