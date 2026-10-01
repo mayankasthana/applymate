@@ -88,6 +88,29 @@ buttons before being caught).
 card edges; after any bulk card interaction, re-verify the list's state
 (the undo toast is ephemeral).
 
+## Reading a job description (logged-in) — the empty detail page
+
+**Goal:** capture the full JD text of a `/jobs/view/<id>/` posting.
+
+**Naive approach fails** (verified 2026-10-01, Chrome/IAB logged-in
+session): the standalone `https://www.linkedin.com/jobs/view/<id>/` page
+renders only the header card (title, company, location, Easy Apply/Save);
+the description module never mounts — reloads and waits don't help
+(`document.body.innerText` stays ~1.4k chars, no `.jobs-description` node
+in the DOM at all). The two-pane search layout
+(`/jobs/search/?currentJobId=<id>`) also fails: LinkedIn ignores the
+`currentJobId` param and shows a default result list ("Jobs in Ireland")
+with no detail pane.
+
+**Working path:** the public, unauthenticated guest endpoint returns the
+full posting HTML with no login:
+`https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/<id>` — the
+description is in `.show-more-less-html__markup`. Use it for the JD text
+(and save the response HTML as `--kind jd-snapshot` evidence); use the
+logged-in `/jobs/view/<id>/` page only for the header screenshot
+(`--kind jd-screenshot`, it shows the Easy Apply button and applicant
+count). Verified 2026-10-01 on job 4474128132 (Hiver).
+
 ## Verification discipline (learned from silent failures)
 
 LinkedIn sometimes drops an action silently — an invite that shows no error
