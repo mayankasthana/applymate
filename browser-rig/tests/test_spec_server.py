@@ -23,8 +23,8 @@ class ValueForTest(unittest.TestCase):
         self.assertEqual(value_for(spec, {"field": {"label": "First Name"}}), "Alex")
 
     def test_placeholder_labels_match_alternation(self):
-        spec = {"field_map": [[r"user email|example\.com", "a@b.co"]]}
-        self.assertEqual(value_for(spec, {"field": {"label": "name@example.com"}}), "a@b.co")
+        spec = {"field_map": [[r"user email|example\.com", "first.last@example.com"]]}
+        self.assertEqual(value_for(spec, {"field": {"label": "name@example.com"}}), "first.last@example.com")
 
     def test_quoted_goal_fallback_for_search_tasks(self):
         self.assertEqual(

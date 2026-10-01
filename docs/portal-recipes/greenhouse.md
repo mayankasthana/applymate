@@ -21,7 +21,7 @@ flyout): they render nothing until physically clicked.
 - Typeahead fields (phone Country, Location City): `click()` the combobox,
   wait ~500 ms, `type("term", { delayMs })` with real keystrokes, wait ~1.5 s —
   the listbox then renders in the ARIA snapshot (`option "India +91"`,
-  `option "Some City, Karnataka, India"`). Click the option.
+  `option "Some City, State, Country"`). Click the option.
 - **Selection lands as a chip, not in the input** (same pattern as the Workday
   typeahead recipe): after clicking an option the search input reads `""` and
   the chosen value appears as a `generic` sibling with a `button "Clear

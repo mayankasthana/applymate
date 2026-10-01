@@ -16,6 +16,10 @@ browser-rig/jev-ultrafast/
 browser-rig/.venv/
 browser-rig/models/
 
+# Python bytecode (bakes build-machine absolute paths into co_filename)
+__pycache__/
+*.py[cod]
+
 # Node
 node_modules/
 npm-debug.log*
