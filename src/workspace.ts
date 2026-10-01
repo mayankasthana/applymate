@@ -8,7 +8,8 @@ import { ChatLog } from "./services/inbox.ts";
 import { ProfileStore } from "./services/profile.ts";
 import { EvidenceStore } from "./services/evidence.ts";
 import { OutreachService } from "./services/outreach.ts";
-import { Application, Job, OutreachMessage } from "./domain.ts";
+import { ReminderService } from "./services/reminders.ts";
+import { Application, Job, OutreachMessage, Reminder } from "./domain.ts";
 
 /**
  * Composition root: wire concrete adapters to services from a loaded config.
@@ -26,6 +27,7 @@ export function workspacePaths(config: Config) {
     chat: join(root, "chat"),
     chatLog: join(root, "chat", "log.jsonl"),
     outreach: join(root, "outreach"),
+    reminders: join(root, "reminders"),
     dossier: join(root, "dossier"),
     dossierIndex: join(root, "dossier", "index.json"),
   };
@@ -33,7 +35,7 @@ export function workspacePaths(config: Config) {
 
 export async function ensureWorkspace(config: Config) {
   const paths = workspacePaths(config);
-  for (const dir of [paths.root, paths.jobs, paths.applications, paths.profile, paths.chat, paths.outreach, paths.dossier]) {
+  for (const dir of [paths.root, paths.jobs, paths.applications, paths.profile, paths.chat, paths.outreach, paths.reminders, paths.dossier]) {
     await mkdir(dir, { recursive: true });
   }
   return paths;
@@ -61,6 +63,13 @@ export function makeServices(config: Config) {
         dir: paths.outreach,
         entityName: "outreach message",
         validate: (r) => OutreachMessage.validate(r),
+      }),
+    }),
+    reminders: new ReminderService({
+      reminders: new JsonCollection<Reminder>({
+        dir: paths.reminders,
+        entityName: "reminder",
+        validate: (r) => Reminder.validate(r),
       }),
     }),
   };

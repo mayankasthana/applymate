@@ -12,6 +12,7 @@ import { type PrefValue } from "./services/profile.ts";
 import { buildFormSpec } from "./form-spec.ts";
 import { checkRigServices, DEFAULT_RIG_ENDPOINTS } from "./services/rig.ts";
 import { outreachState, withState, referralCounts } from "./services/outreach.ts";
+import { reminderState } from "./services/reminders.ts";
 import { followUpDueAt } from "./domain.ts";
 import { type Job, type Evidence } from "./domain.ts";
 
@@ -611,6 +612,63 @@ async function cmdOutreachReplied({ pos, flags, io, rootDir }: CommandContext): 
 }
 
 // ---------------------------------------------------------------------------
+// reminders (dated decisions that must resurface — read by the boot sequence)
+// ---------------------------------------------------------------------------
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+async function cmdRemindersAdd({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const usage = "reminders add <title...> --due <iso-date> [--app appId] [--note n] [--at iso]";
+  const title = (flags.title !== undefined ? String(flags.title) : pos.join(" ")).trim();
+  if (!title) return failWith(io, usage, "missing reminder title");
+  if (flags.due === undefined) return failWith(io, usage, "--due is required (ISO date the decision comes due, e.g. 2026-10-01)");
+  const due = String(flags.due);
+  if (Number.isNaN(Date.parse(due))) return failWith(io, usage, `--due must be a parseable date (ISO), got: ${due}`);
+  const { reminders } = await services(rootDir);
+  const rem = await reminders.add({
+    title,
+    dueAt: due,
+    appId: flags.app !== undefined ? String(flags.app) : undefined,
+    note: flags.note !== undefined ? String(flags.note) : undefined,
+  }, { now: flags.at ? String(flags.at) : new Date().toISOString() });
+  if (flags.json) return jsonOut(io, rem);
+  line(io, `logged ${rem.id} — due ${rem.dueAt.slice(0, 10)}: ${rem.title}${rem.appId ? ` [${rem.appId}]` : ""}`);
+  line(io, `boot sequence surfaces it from ${rem.dueAt.slice(0, 10)} on (reminders list --due); close with: reminders done ${rem.id}`);
+  return 0;
+}
+
+async function cmdRemindersList({ flags, io, rootDir }: CommandContext): Promise<number> {
+  const { reminders } = await services(rootDir);
+  const rems = await reminders.list({
+    appId: flags.app !== undefined ? String(flags.app) : undefined,
+    due: Boolean(flags.due),
+    all: Boolean(flags.all),
+  });
+  if (flags.json) return jsonOut(io, rems);
+  if (!rems.length) line(io, flags.due ? "(nothing due — dated decisions will resurface here)" : "(no open reminders)");
+  const now = Date.now();
+  for (const r of rems) {
+    const state = reminderState(r, now);
+    const when =
+      state === "done" ? `done ${r.doneAt?.slice(0, 10)}`
+      : state === "due" ? `DUE since ${r.dueAt.slice(0, 10)} (${Math.max(0, Math.floor((now - Date.parse(r.dueAt)) / DAY_MS))}d overdue)`
+      : `due ${r.dueAt.slice(0, 10)}`;
+    line(io, `${r.id}  ${when.padEnd(34)} ${r.title}${r.appId ? ` [${r.appId}]` : ""}${r.note ? ` — ${r.note}` : ""}`);
+  }
+  return 0;
+}
+
+async function cmdRemindersDone({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const [id] = pos;
+  if (!id) return failWith(io, "reminders done <id> [--at iso]", "missing reminder id");
+  const { reminders } = await services(rootDir);
+  const rem = await reminders.markDone(id, { at: flags.at ? String(flags.at) : new Date().toISOString() });
+  if (flags.json) return jsonOut(io, rem);
+  line(io, `${rem.id}: done at ${rem.doneAt} (${rem.title})`);
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // chat
 // ---------------------------------------------------------------------------
 
@@ -765,6 +823,12 @@ function printHelp(io: Io, code = 0): number {
       "  outreach followup <id>          record the one follow-up",
       "  outreach replied <id>           record a reply (retires the follow-up)",
       "",
+      "reminders (dated decisions that must resurface):",
+      "  reminders add <title...> --due <date> [--app id] [--note n]",
+      "                                  register a deadline the moment it is decided",
+      "  reminders list [--due] [--all] [--app id]   what's due / upcoming / history",
+      "  reminders done <id>             record the decision acted on",
+      "",
       "chat (the human <-> agent loop):",
       "  chat send <text...>             human sends a message",
       "  chat reply <text...>            agent posts a reply",
@@ -819,6 +883,9 @@ const COMMANDS: Command[] = [
   { name: "outreach list", summary: "open threads / follow-ups due", run: cmdOutreachList },
   { name: "outreach followup", summary: "record the one follow-up", run: cmdOutreachFollowUp },
   { name: "outreach replied", summary: "record a reply", run: cmdOutreachReplied },
+  { name: "reminders add", summary: "register a dated decision/deadline", run: cmdRemindersAdd },
+  { name: "reminders list", summary: "what's due / upcoming / history", run: cmdRemindersList },
+  { name: "reminders done", summary: "record the decision acted on", run: cmdRemindersDone },
   { name: "chat send", summary: "user message", run: cmdChatSend },
   { name: "chat reply", summary: "agent message", run: cmdChatReply },
   { name: "chat poll", summary: "fetch user messages", run: cmdChatPoll },
