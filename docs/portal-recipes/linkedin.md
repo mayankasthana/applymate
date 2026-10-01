@@ -337,6 +337,30 @@ input[type=file]#attachment-input-<n>   accept="image/*,.ai,.psd,.pdf,.doc,.docx
 There are two such inputs per page — one `image/*` only, one the full document set — so **select by the
 `accept` that contains `.pdf`, not by index**. IAB's own file-chooser/`setFiles` path is
 `capability_unsupported`, so attaching needs the DataTransfer-injection route already proven on the Workday
-and SmartRecruiters upload widgets (see [workday.md](workday.md)), or the candidate attaching by hand. The
-input existing and being reachable is the part worth recording: it means a resume can be pushed into a
-LinkedIn message without the candidate doing it manually.
+and SmartRecruiters upload widgets (see [workday.md](workday.md)), or the candidate attaching by hand.
+
+**Attachment injection works on this composer (verified 2026-10-01, 2/2 sends, resume delivered).** Base64
+the PDF host-side, then build the file in the page and fire `change`:
+
+```js
+const input = Array.from(document.querySelectorAll('input[type=file]'))
+  .find(i => (i.accept || '').includes('.pdf'));        // pick by accept, not index
+const bin = atob(payload);                                // payload = base64 of the PDF
+const arr = new Uint8Array(bin.length);
+for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+const file = new File([arr], 'Candidate_Resume.pdf', { type: 'application/pdf' });
+const dt = new DataTransfer();
+dt.items.add(file);
+input.files = dt.files;
+input.dispatchEvent(new Event('change', { bubbles: true }));
+```
+
+LinkedIn renders an `Attached` chip with the size (e.g. "263 KB") within ~2s — read it back before sending,
+since a silently dropped `files` assignment still leaves a valid-looking compose box. **Rename the file to the
+candidate-only name at the point of injection** (`new File([...], 'Candidate_Resume.pdf')`), because the
+attachment name is what the recruiter sees: a per-company filename that is correct in the dossier leaks the
+target to the recipient. Keep the company+role-named copy on disk; strip it at the boundary.
+
+The full working order is: type the text with the `execCommand` insert above → attach → read the size chip →
+hover-travel click Send → verify with all three send signals. Attachment and text send as ONE message; do not
+attach in a separate action expecting a second message.
