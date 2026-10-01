@@ -22,6 +22,7 @@ employers share an ATS, so a `workday.md` recipe serves every Workday tenant:
 
 | file | covers | last verified |
 |---|---|---|
+| [greenhouse.md](greenhouse.md) | greenhouse.io job boards — typeahead flyout fields, chip-selection verification, DataTransfer resume upload, submit/confirmation flow | 2026-10-01 |
 | [icims.md](icims.md) | icims.com — iframe traversal (`icims_content_iframe`), GDPR/hCaptcha handling, candidate profile updates, verification | 2026-10-01 |
 | [linkedin.md](linkedin.md) | linkedin.com — messaging, connection invites, job-card interactions, reading job descriptions, verification discipline | 2026-10-01 |
 | [phenom.md](phenom.md) | Phenom "pcsx" apply portals (jobs.autodesk.com et al.) — resume upload, reload behavior, click fallbacks | in the field; date not recorded |
