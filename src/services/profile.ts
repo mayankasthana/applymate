@@ -47,6 +47,23 @@ export interface AnswerFile {
   answers: Record<string, AnswerRecord>;
 }
 
+/**
+ * A named markdown document the candidate owns — resume standards, the standing
+ * open-source list, outreach voice notes. Kept out of the committed contract on
+ * purpose: `AGENTS.md` states the rule and points at the note, so the repo can be
+ * published without carrying one person's job-search specifics.
+ */
+export interface NoteRecord {
+  name: string;
+  body: string;
+  updatedAt: string;
+}
+
+export interface NoteFile {
+  version: 1;
+  notes: Record<string, NoteRecord>;
+}
+
 /** Keys the agent should ask about when unset — suggested, never assumed.
  *  `candidateName` comes first: how to address the candidate (first name). */
 export const RECOMMENDED_PREFERENCE_KEYS: readonly string[] = [
@@ -62,17 +79,19 @@ export class ProfileStore {
   readonly #dir: string;
   readonly #prefsPath: string;
   readonly #answersPath: string;
+  readonly #notesPath: string;
   readonly #now: () => string;
 
   constructor({ dir, now = () => new Date().toISOString() }: { dir: string; now?: () => string }) {
     this.#dir = dir;
     this.#prefsPath = join(dir, "preferences.json");
     this.#answersPath = join(dir, "answers.json");
+    this.#notesPath = join(dir, "notes.json");
     this.#now = now;
   }
 
-  get paths(): { preferences: string; answers: string } {
-    return { preferences: this.#prefsPath, answers: this.#answersPath };
+  get paths(): { preferences: string; answers: string; notes: string } {
+    return { preferences: this.#prefsPath, answers: this.#answersPath, notes: this.#notesPath };
   }
 
   // -- preferences ------------------------------------------------------------
@@ -149,6 +168,29 @@ export class ProfileStore {
     return Object.values(file.answers).sort((a, b) => a.key.localeCompare(b.key));
   }
 
+  // -- notes (candidate-owned documents, e.g. resume standards) -----------------
+
+  async setNote(name: string, body: string): Promise<NoteRecord> {
+    const key = normalizeNoteName(name);
+    if (!key) throw new Error("note name must be a non-empty string");
+    if (typeof body !== "string" || !body.trim()) throw new Error("note body must be a non-empty string");
+    const file = await this.#loadNotes();
+    const record: NoteRecord = { name: key, body, updatedAt: this.#now() };
+    file.notes[key] = record;
+    await writeJsonAtomic(this.#notesPath, file);
+    return record;
+  }
+
+  async getNote(name: string): Promise<NoteRecord | null> {
+    const file = await this.#loadNotes();
+    return file.notes[normalizeNoteName(name)] ?? null;
+  }
+
+  async notes(): Promise<NoteRecord[]> {
+    const file = await this.#loadNotes();
+    return Object.values(file.notes).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   // -- storage ------------------------------------------------------------------
 
   async #loadPrefs(): Promise<PreferenceFile> {
@@ -157,6 +199,10 @@ export class ProfileStore {
 
   async #loadAnswers(): Promise<AnswerFile> {
     return this.#loadJson(this.#answersPath, { version: 1, answers: {} });
+  }
+
+  async #loadNotes(): Promise<NoteFile> {
+    return this.#loadJson(this.#notesPath, { version: 1, notes: {} });
   }
 
   async #loadJson<T>(path: string, fallback: T): Promise<T> {
@@ -181,4 +227,16 @@ export function answerKey(question: string): string {
 
 function normalizeKey(key: string): string {
   return typeof key === "string" ? key.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 60) : "";
+}
+
+/** Note names stay human-readable: `resume-standards`, not `resumestandards`. */
+function normalizeNoteName(name: string): string {
+  return typeof name === "string"
+    ? name
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60)
+    : "";
 }

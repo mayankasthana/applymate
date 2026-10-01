@@ -5,7 +5,7 @@ import { buildFormSpec, DEFAULT_SUPPRESS_CLICK, FORM_FIELD_CATEGORIES } from "..
 
 const ANSWERS = [
   { question: "First name", answer: "Alex" },
-  { question: "Last name", answer: "Tester" },
+  { question: "Last name", answer: "Rivers" },
   { question: "What email should employers use?", answer: "aja@example.com" },
   { question: "Mobile number", answer: "5551234567" },
   { question: "Current address", answer: "1 Test Way, Testville" },
@@ -16,7 +16,7 @@ test("buildFormSpec maps stored answers onto page field labels", () => {
   const spec = buildFormSpec({ name: "app-1", answers: ANSWERS });
   const mapped = Object.fromEntries(spec.field_map);
   assert.equal(mapped["first name"], "Alex");
-  assert.equal(mapped["last name"], "Tester");
+  assert.equal(mapped["last name"], "Rivers");
   assert.equal(mapped["mobile|phone"], "5551234567");
   assert.equal(mapped["user email|example\\.com|e-?mail"], "aja@example.com");
   // every mapped field gates DONE in stage mode
