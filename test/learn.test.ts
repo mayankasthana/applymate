@@ -179,6 +179,31 @@ test("the biggest actionable gap — verdicts with no score — is surfaced firs
   assert.ok(first!.appIds!.length > 0);
 });
 
+test("a score on the job counts when the application has none", () => {
+  // `app match` is only run sometimes, but `job match` runs at discovery — so
+  // the job's score is the usual source. Reading only app.matchScore would
+  // report these verdicts as unscored and wrongly call the data thin.
+  const job = { ...Job.create({ id: "job-1", company: "Acme", title: "Staff Eng", description: "d" }), matchScore: 82 };
+  const apps = [judged("green", null, { jobId: "job-1" })];
+  const r = buildLearnReport(apps, { jobs: [job] });
+  assert.equal(r.totals.scoredVerdicts, 1);
+  assert.equal(r.unscored.count, 0);
+  assert.equal(r.bands.find((b) => b.verdict === "green")!.mean, 82);
+});
+
+test("the application's own score wins over the job's when both exist", () => {
+  const job = { ...Job.create({ id: "job-1", company: "Acme", title: "Staff Eng", description: "d" }), matchScore: 70 };
+  const apps = [judged("green", 88, { jobId: "job-1" })];
+  const r = buildLearnReport(apps, { jobs: [job] });
+  assert.equal(r.bands.find((b) => b.verdict === "green")!.mean, 88);
+});
+
+test("a verdict with no score anywhere is still reported as unscored", () => {
+  const r = buildLearnReport([judged("green", null, { jobId: "job-unknown" })], { jobs: [] });
+  assert.equal(r.totals.scoredVerdicts, 0);
+  assert.equal(r.unscored.count, 1);
+});
+
 test("an empty workspace produces a report instead of throwing", () => {
   const r = buildLearnReport([]);
   assert.equal(r.totals.applications, 0);

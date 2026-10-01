@@ -96,11 +96,30 @@ function median(xs: number[]): number | null {
   return s.length % 2 ? s[mid]! : Math.round(((s[mid - 1]! + s[mid]!) / 2) * 10) / 10;
 }
 
-function band(verdict: PursuitVerdict, apps: Application[], sampleSize: number): VerdictBand {
+/**
+ * The score to calibrate on. `app.matchScore` is only set when `app match` was
+ * run on the application, but the score is almost always already on the job —
+ * `job match` runs at discovery time. Prefer the app's own score (it may have
+ * been re-run against an updated dossier) and fall back to the job's, exactly
+ * as the board view does. Without this fallback the report sees a fraction of
+ * the verdicts that actually have a score, and wrongly calls the data thin.
+ */
+export function resolveScore(
+  app: Pick<Application, "matchScore" | "jobId">,
+  jobById: Map<string, Pick<Job, "matchScore">>
+): number | null {
+  if (typeof app.matchScore === "number") return app.matchScore;
+  return jobById.get(app.jobId)?.matchScore ?? null;
+}
+
+function band(
+  verdict: PursuitVerdict,
+  apps: Application[],
+  sampleSize: number,
+  scoreOf: (app: Application) => number | null
+): VerdictBand {
   const inBand = apps.filter((a) => a.pursuit?.verdict === verdict);
-  const scores = inBand
-    .map((a) => a.matchScore)
-    .filter((s): s is number => typeof s === "number");
+  const scores = inBand.map(scoreOf).filter((s): s is number => typeof s === "number");
   const scored = scores.length;
   return {
     verdict,
@@ -141,7 +160,9 @@ export function buildLearnReport(
   applications: Application[],
   { jobs = [], minMatchScore = 0, now = new Date().toISOString(), sampleSize = CONFIDENT_SAMPLE }: LearnOptions = {}
 ): LearnReport {
-  const bands = PURSUIT_VERDICTS.map((v) => band(v, applications, sampleSize));
+  const jobById = new Map(jobs.map((j) => [j.id, j]));
+  const scoreOf = (app: Application) => resolveScore(app, jobById);
+  const bands = PURSUIT_VERDICTS.map((v) => band(v, applications, sampleSize, scoreOf));
 
   const green = bands.find((b) => b.verdict === "green")!;
   const nonGreenScores = bands
@@ -161,11 +182,10 @@ export function buildLearnReport(
   }
 
   const verdicts = applications.filter((a) => a.pursuit?.verdict);
-  const scoredVerdicts = verdicts.filter((a) => typeof a.matchScore === "number");
+  const scoredVerdicts = verdicts.filter((a) => scoreOf(a) !== null);
   const decided = applications.filter((a) => INTERVIEWED.has(a.status) || a.status === "rejected");
 
-  const unscoredApps = verdicts.filter((a) => typeof a.matchScore !== "number");
-  const jobById = new Map(jobs.map((j) => [j.id, j]));
+  const unscoredApps = verdicts.filter((a) => scoreOf(a) === null);
   const unscored: LearnReport["unscored"] = {
     count: unscoredApps.length,
     appIds: unscoredApps
