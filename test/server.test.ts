@@ -6,6 +6,7 @@ import { request } from "node:http";
 import type { Server } from "node:http";
 
 import { runServer } from "../src/server.ts";
+import { UI_HTML } from "../src/server-ui.ts";
 import { saveConfig, type Config } from "../src/config.ts";
 import { makeServices } from "../src/workspace.ts";
 import { withTmpDir } from "./helpers.ts";
@@ -68,6 +69,18 @@ test("serves the UI page on / and binds to loopback", async () => {
     assert.match(html, /Aja/);
     assert.match(html, /api\/state/);
   });
+});
+
+// The UI is one embedded <script> inside a template literal, so a quote typed
+// wrong there compiles cleanly and then dies at runtime, leaving the page stuck
+// on "loading…" with no build error anywhere. Parse it here instead.
+test("the embedded UI script is syntactically valid JavaScript", () => {
+  const script = UI_HTML.match(/<script>([\s\S]*)<\/script>/);
+  assert.ok(script, "UI_HTML must contain a <script> block");
+  assert.doesNotThrow(
+    () => new Function(script![1]!),
+    "embedded UI script has a syntax error",
+  );
 });
 
 test("chat: POST from the UI, GET by cursor, visible to the agent", async () => {

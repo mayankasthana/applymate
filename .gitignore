@@ -5,6 +5,10 @@ workspace/
 # Settings point at the captain's dossier — machine-local, never committed.
 applymate.config.json
 
+# Lavish review scratch: design explorations and their screenshots. Local
+# comparison material, never part of the product.
+.lavish/
+
 # OS / editor noise
 .DS_Store
 *.swp

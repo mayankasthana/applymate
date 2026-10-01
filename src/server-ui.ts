@@ -3,128 +3,434 @@
  * plumbing. Vanilla JS: polls the chat queue every 2s, renders the pipeline
  * board, and surfaces missing preferences as inline forms — the "ask me and
  * remember it" loop, human side.
+ *
+ * Design: the "Local Job Application Cockpit" direction — a dark, dense
+ * operator surface with an icon rail, an oversized needs-you count borrowed
+ * from the triage direction, kanban lanes, and chat on the right. Every
+ * affordance here maps to something the toolbelt already exposes; the rail's
+ * Learn and Settings entries are deliberately inert, because those run in the
+ * CLI and have no API surface to back a view.
  */
 export const UI_HTML = `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="cockpit">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aja — job pipeline & chat</title>
+<title>Aja — job pipeline &amp; chat</title>
 <style>
-  :root { color-scheme: light; --ink:#1a202c; --muted:#718096; --line:#e2e8f0; --accent:#2b6cb0; --ok:#2f855a; }
+  :root {
+    color-scheme: dark;
+    --canvas:#0d1117; --surface:#161b22; --raised:#21262d; --line:#30363d;
+    --ink:#f0f6fc; --muted:#8b949e; --dim:#6e7681;
+    --amber:#f59e0b; --amber-hi:#fbbf24; --amber-dim:#d97706;
+    --emerald:#10b981; --rose:#ef4444;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); background:#f7fafc; }
-  header { display:flex; align-items:baseline; gap:.6rem; padding:.9rem 1.2rem; background:#fff; border-bottom:1px solid var(--line); }
-  header h1 { font-size:1.05rem; margin:0; }
-  header .sub { color:var(--muted); font-size:.85rem; }
-  main { display:grid; grid-template-columns: minmax(0,1fr) 380px; gap:1rem; padding:1rem; max-width:1200px; margin:0 auto; }
-  @media (max-width: 900px){ main { grid-template-columns: 1fr; } }
-  section.card { background:#fff; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
-  section.card h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0; padding:.7rem 1rem; border-bottom:1px solid var(--line); }
-  #prefs { grid-column: 1 / -1; }
-  #prefs .row { display:flex; flex-wrap:wrap; gap:.5rem; padding:.7rem 1rem; align-items:center; }
-  .chip { display:inline-flex; gap:.4rem; align-items:center; background:#ebf8ff; border:1px solid #bee3f8; border-radius:999px; padding:.15rem .3rem .15rem .7rem; font-size:.85rem; }
+  html, body { height: 100%; }
+  body {
+    margin:0; background:var(--canvas); color:var(--ink);
+    font:13px/1.5 var(--sans);
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  *, *::before, *::after { min-width: 0; }
+  p, h1, h2, h3, h4, li, dd, dt, td, th, span, label, button, kbd, pre {
+    overflow-wrap: anywhere;
+  }
+  img, svg { max-width: 100%; height: auto; }
+  a { color: var(--amber-hi); }
+  button { font: inherit; }
+  .mono { font-family: var(--mono); }
+  kbd {
+    font:11px/1 var(--mono); background:var(--surface); border:1px solid var(--line);
+    color:var(--muted); border-radius:3px; padding:3px 5px;
+  }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#30363d; border-radius:5px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+
+  /* ---------- shell ---------- */
+  .shell {
+    display:grid; grid-template-columns: 64px minmax(0,1fr) 360px;
+    height: calc(100vh - 44px);
+  }
+  @media (max-width: 1100px) {
+    .shell { grid-template-columns: 56px minmax(0,1fr) 300px; }
+  }
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 56px minmax(0,1fr); grid-template-rows: minmax(0,1fr) 45vh; }
+    .chatpane { grid-column: 2; border-left:0; border-top:1px solid var(--line); }
+  }
+
+  /* ---------- icon rail ---------- */
+  .rail {
+    background:var(--surface); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center;
+    padding:.6rem 0; gap:.25rem;
+  }
+  .rail .mark {
+    width:32px; height:32px; border-radius:7px; background:var(--amber);
+    color:#0d1117; font-weight:800; font-size:15px;
+    display:grid; place-items:center; margin-bottom:.6rem; flex:none;
+  }
+  .rail button {
+    position:relative;
+    width:42px; height:42px; border-radius:8px; border:1px solid transparent;
+    background:none; color:var(--muted); cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1px; padding:0;
+  }
+  .rail button svg { width:17px; height:17px; stroke:currentColor; fill:none;
+    stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .rail button span { font-size:9px; letter-spacing:.02em; }
+  .rail button:hover:not([disabled]) { background:var(--raised); color:var(--ink); }
+  .rail button[aria-current="page"] { background:var(--raised); border-color:var(--line); color:var(--amber-hi); }
+  .rail button[disabled] { opacity:.34; cursor:not-allowed; }
+  .rail .spacer { flex:1; }
+  .rail .count {
+    position:absolute; top:6px; right:4px; transform:none;
+    background:var(--amber); color:#0d1117; border-radius:999px;
+    font:10px/1 var(--mono); padding:2px 4px; pointer-events:none;
+  }
+
+  /* ---------- topbar ---------- */
+  .topbar {
+    height:44px; display:flex; align-items:center; gap:.8rem;
+    padding:0 .9rem; background:var(--surface); border-bottom:1px solid var(--line);
+  }
+  .topbar .who { font-weight:600; font-size:13px; }
+  .topbar .where { color:var(--dim); font-size:12px; }
+  .topbar .stat {
+    display:flex; align-items:center; gap:.3rem; font:11px/1 var(--mono);
+    color:var(--muted); white-space:nowrap;
+  }
+  .topbar .stat b { color:var(--ink); font-weight:600; }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--emerald); flex:none; }
+  .topbar .search { margin-left:auto; display:flex; align-items:center; gap:.4rem; }
+  .topbar input[type=search] {
+    width:230px; background:var(--canvas); border:1px solid var(--line); border-radius:7px;
+    color:var(--ink); font:12px/1 var(--sans); padding:7px 9px; outline:none;
+  }
+  .topbar input[type=search]:focus { border-color:var(--amber); }
+  .topbar input[type=search]::placeholder { color:var(--dim); }
+  .topbar .clear {
+    background:var(--raised); border:1px solid var(--line); color:var(--muted);
+    border-radius:7px; cursor:pointer; padding:6px 8px; font-size:11px;
+  }
+  @media (max-width: 780px) { .topbar .where { display:none; } .topbar input[type=search] { width:150px; } }
+
+  /* ---------- main pane ---------- */
+  .pane { overflow-y:auto; padding:1.1rem 1.2rem 2rem; }
+
+  .triage { margin-bottom:1.3rem; }
+  .triage .bigcount {
+    margin:0; font-size:clamp(28px, 4.4vw, 46px); line-height:1.05;
+    letter-spacing:-.025em; font-weight:700;
+  }
+  .triage .bigcount.zero { color:var(--emerald); }
+  .triage .subline { margin:.3rem 0 .9rem; color:var(--muted); font-size:13px; }
+  .needcards { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:.7rem; }
+  .needcard {
+    background:var(--surface); border:1px solid var(--line); border-radius:9px;
+    padding:.7rem .8rem; display:flex; flex-direction:column; gap:.3rem;
+    border-left-width:3px; text-align:left; cursor:pointer; width:100%;
+    color:inherit; font:inherit;
+  }
+  .needcard:hover { background:var(--raised); }
+  .needcard.overdue { border-left-color:var(--rose); }
+  .needcard.followup { border-left-color:var(--amber); }
+  .needcard.staged { border-left-color:var(--emerald); }
+  .needcard .top { display:flex; align-items:center; gap:.45rem; }
+  .needcard .kind {
+    font:10px/1 var(--mono); text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
+  }
+  .needcard kbd { margin-left:auto; }
+  .needcard .title { font-weight:600; font-size:13px; }
+  .needcard .meta { color:var(--muted); font-size:12px; }
+
+  .panelhead {
+    display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap;
+    border-bottom:1px solid var(--line); padding-bottom:.5rem; margin-bottom:.8rem;
+  }
+  .panelhead h2 {
+    margin:0; font:600 11px/1 var(--mono); text-transform:uppercase;
+    letter-spacing:.1em; color:var(--muted);
+  }
+  .panelhead .hint { color:var(--dim); font-size:12px; }
+  .panelhead .count { font:11px/1 var(--mono); color:var(--muted); }
+
+  /* ---------- kanban ---------- */
+  .lanes { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(238px,1fr);
+    gap:.7rem; align-items:start; overflow-x:auto; padding-bottom:.5rem; }
+  .lane { background:var(--surface); border:1px solid var(--line); border-radius:9px; }
+  .lane > h3 {
+    margin:0; padding:.5rem .65rem; border-bottom:1px solid var(--line);
+    font:600 10px/1.4 var(--mono); text-transform:uppercase; letter-spacing:.09em;
+    color:var(--muted); display:flex; align-items:center; gap:.4rem;
+  }
+  .lane > h3 .n {
+    margin-left:auto; background:var(--raised); border:1px solid var(--line);
+    border-radius:4px; padding:.1rem .3rem; color:var(--ink); font-size:10px;
+  }
+  .lane .cards { padding:.5rem; display:flex; flex-direction:column; gap:.4rem; }
+
+  .card {
+    background:var(--raised); border:1px solid var(--line); border-radius:7px;
+    padding:.55rem .6rem; cursor:pointer; display:flex; flex-direction:column; gap:.35rem;
+  }
+  .card:hover { border-color:var(--amber); }
+  .card .co { color:var(--muted); font-size:11px; font-weight:600; }
+  .card .role { font-size:13px; font-weight:500; }
+  .card .tags { display:flex; align-items:center; gap:.3rem; flex-wrap:wrap; }
+  .card .spacer { flex:1; }
+
+  .pill {
+    font:10px/1 var(--mono); border-radius:4px; padding:.28rem .4rem;
+    border:1px solid var(--line); color:var(--muted); background:var(--surface);
+    display:inline-flex; align-items:center; gap:.25rem;
+  }
+  .pill.match.good { color:var(--emerald); border-color:rgba(16,185,129,.4); background:rgba(16,185,129,.1); }
+  .pill.match.mid { color:var(--amber-hi); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.1); }
+  .pill.match.low { color:var(--rose); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.1); }
+  .pill.pursuit.green { color:var(--emerald); border-color:rgba(16,185,129,.4); background:rgba(16,185,129,.1); }
+  .pill.pursuit.amber { color:var(--amber-hi); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.1); }
+  .pill.pursuit.red { color:var(--rose); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.1); }
+  .req { font:10px/1 var(--mono); color:var(--amber-hi); text-decoration:none;
+    border:1px solid var(--line); border-radius:4px; padding:.28rem .4rem; }
+  .req:hover { border-color:var(--amber); }
+  .discard {
+    border:1px solid var(--line); background:none; color:var(--dim);
+    border-radius:4px; width:19px; height:19px; font-size:10px; line-height:1;
+    cursor:pointer; padding:0; flex:none;
+  }
+  .discard:hover { border-color:var(--rose); color:var(--rose); }
+
+  /* ---------- actions view ---------- */
+  .actgrp { margin-bottom:1rem; }
+  .actgrp h3 { margin:0 0 .4rem; font:600 11px/1 var(--mono); text-transform:uppercase;
+    letter-spacing:.08em; color:var(--muted); }
+  .actgrp ul { margin:0; padding:0; list-style:none; }
+  .actgrp li {
+    background:var(--surface); border:1px solid var(--line); border-radius:7px;
+    padding:.5rem .65rem; margin-bottom:.35rem; display:flex; gap:.6rem; align-items:baseline;
+  }
+  .actgrp .when { color:var(--dim); font-size:11px; font-family:var(--mono); margin-left:auto; white-space:nowrap; }
+  .actgrp .overdue { color:var(--rose); font-weight:600; }
+  .applink { background:none; border:0; color:var(--amber-hi); font:11px/1 var(--mono);
+    cursor:pointer; padding:0; text-decoration:underline; }
+
+  /* ---------- preferences ---------- */
+  .prefs { margin-top:1.4rem; border-top:1px solid var(--line); padding-top:.8rem; }
+  .prefs .row { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; margin-top:.5rem; }
+  .chip {
+    display:inline-flex; gap:.4rem; align-items:center;
+    background:rgba(245,158,11,.07); border:1px solid rgba(245,158,11,.3);
+    border-radius:999px; padding:.2rem .3rem .2rem .65rem; font-size:12px;
+  }
+  .chip .k { font-family:var(--mono); font-size:11px; color:var(--amber-hi); }
   .chip form { display:inline-flex; gap:.3rem; }
-  .chip input { border:1px solid #bee3f8; border-radius:999px; padding:.15rem .6rem; font-size:.85rem; min-width:9rem; }
-  .chip button, .btn { border:0; background:var(--accent); color:#fff; border-radius:999px; padding:.22rem .8rem; font-size:.85rem; cursor:pointer; }
-  #board { display:grid; gap:1rem; padding:1rem; }
-  .boardtools { display:flex; gap:.4rem; padding:.6rem 1rem; border-bottom:1px solid var(--line); }
-  .boardtools input { flex:1; border:1px solid var(--line); border-radius:8px; padding:.35rem .7rem; font:inherit; font-size:.9rem; outline:none; }
-  .boardtools input:focus { border-color:var(--accent); }
-  .boardtools button { border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:8px; padding:0 .6rem; font-size:.85rem; cursor:pointer; }
-  .boardtools button:hover { border-color:var(--accent); color:var(--accent); }
-  .status h3 { font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 .4rem; }
-  .job { border:1px solid var(--line); border-radius:8px; padding:.55rem .75rem; margin-bottom:.45rem; background:#fff; cursor:pointer; }
-  .job:hover { border-color:var(--accent); }
-  .job .t { font-weight:600; }
-  .job .c { color:var(--muted); font-size:.85rem; }
-  .job .req { display:inline-block; margin-left:.4rem; font-size:.75rem; color:var(--accent); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:0 .45rem; }
-  .job .req:hover { border-color:var(--accent); }
-  .score { float:right; font-size:.75rem; border-radius:999px; padding:.05rem .55rem; background:#edf2f7; }
-  .score.strong { background:#c6f6d5; color:var(--ok); }
-  .score.good { background:#feebc8; }
-  .score.fair, .score.stretch { background:#fed7d7; }
-  .pursuit { float:right; margin-right:.3rem; font-size:.75rem; border-radius:999px; padding:.05rem .55rem; background:#edf2f7; color:var(--muted); cursor:help; }
-  .pursuit.green { background:#c6f6d5; color:var(--ok); }
-  .pursuit.amber { background:#feebc8; color:#7b341e; }
-  .pursuit.red { background:#fed7d7; color:#742a2a; }
-  .ref { float:right; margin-right:.3rem; font-size:.75rem; border-radius:999px; padding:.05rem .55rem; background:#edf2f7; color:var(--muted); }
-  .ref.yes { background:#c6f6d5; color:var(--ok); }
-  .ref.no { background:#feebc8; color:#7b341e; }
-  .job .discard { float:right; margin-left:.3rem; border:1px solid var(--line); background:none; color:var(--muted); border-radius:999px; width:1.35rem; height:1.35rem; font-size:.75rem; line-height:1; cursor:pointer; }
-  .job .discard:hover { border-color:#e53e3e; color:#e53e3e; background:#fff5f5; }
-  .ostate.follow-up-due { color:#c05621; font-weight:600; }
-  .ostate.replied { color:var(--ok); }
-  ul.outreach { margin:.3rem 0; padding-left:1.1rem; }
-  ul.outreach li { margin:.2rem 0; }
-  #actions { grid-column: 1 / -1; }
-  #actions .grp { padding:.55rem 1rem; border-bottom:1px solid var(--line); }
-  #actions .grp:last-child { border-bottom:0; }
-  #actions h4 { margin:.15rem 0 .3rem; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
-  #actions ul { margin:0; padding-left:1.1rem; }
-  #actions li { margin:.18rem 0; }
-  #actions .overdue { color:#c05621; font-weight:600; }
-  #actions .when { color:var(--muted); font-size:.85rem; }
-  #actions .applink { color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:0; font:inherit; font-size:.85rem; padding:0; }
-  #chatlog { height:60vh; overflow-y:auto; padding:.8rem; display:flex; flex-direction:column; gap:.45rem; }
-  .bubble { max-width:88%; padding:.5rem .75rem; border-radius:12px; white-space:pre-wrap; word-wrap:break-word; }
-  .bubble.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
-  .bubble.agent { align-self:flex-start; background:#edf2f7; border-bottom-left-radius:4px; }
-  .bubble .who { display:block; font-size:.7rem; opacity:.75; margin-bottom:.15rem; }
-  #composer { display:flex; border-top:1px solid var(--line); }
-  #composer input { flex:1; border:0; padding:.8rem .9rem; font:inherit; outline:none; }
-  #composer button { border:0; background:var(--accent); color:#fff; padding:0 1.1rem; cursor:pointer; }
-  #overlay { position:fixed; inset:0; background:rgba(26,32,44,.45); display:none; align-items:center; justify-content:center; }
+  .chip input {
+    border:1px solid var(--line); background:var(--canvas); color:var(--ink);
+    border-radius:999px; padding:.2rem .55rem; font-size:12px; min-width:8rem; outline:none;
+  }
+  .chip input:focus { border-color:var(--amber); }
+  .chip button {
+    border:0; background:var(--amber); color:#0d1117; border-radius:999px;
+    padding:.2rem .65rem; font-size:12px; font-weight:600; cursor:pointer;
+  }
+
+  /* ---------- chat ---------- */
+  .chatpane {
+    background:var(--surface); border-left:1px solid var(--line);
+    display:flex; flex-direction:column; min-height:0;
+  }
+  .chatpane > header {
+    display:flex; align-items:baseline; gap:.5rem; padding:.6rem .8rem;
+    border-bottom:1px solid var(--line); flex:none;
+  }
+  .chatpane > header h2 { margin:0; font-size:13px; font-weight:600; }
+  .chatpane > header .sub { color:var(--dim); font-size:11px; }
+  #chatlog { flex:1; overflow-y:auto; padding:.7rem .8rem; display:flex;
+    flex-direction:column; gap:.45rem; min-height:0; }
+  .bubble {
+    max-width:92%; padding:.5rem .65rem; border-radius:8px;
+    white-space:pre-wrap; border:1px solid var(--line); font-size:13px;
+  }
+  .bubble.user { align-self:flex-end; background:var(--raised); border-bottom-right-radius:2px; }
+  .bubble.agent { align-self:flex-start; background:var(--canvas); border-bottom-left-radius:2px; color:#c9d1d9; }
+  .bubble .who { display:block; font:10px/1.4 var(--mono); color:var(--dim); margin-bottom:.15rem;
+    text-transform:uppercase; letter-spacing:.06em; }
+  #composer { display:flex; border-top:1px solid var(--line); flex:none; }
+  #composer input { flex:1; border:0; background:none; color:var(--ink);
+    padding:.7rem .8rem; font:inherit; outline:none; min-width:0; }
+  #composer input::placeholder { color:var(--dim); }
+  #composer button { border:0; background:var(--amber); color:#0d1117; font-weight:600;
+    padding:0 1rem; cursor:pointer; }
+
+  /* ---------- application sheet ---------- */
+  #overlay { position:fixed; inset:0; background:rgba(1,4,9,.72); display:none;
+    align-items:center; justify-content:center; padding:2vh 1rem; z-index:40; }
   #overlay.open { display:flex; }
-  #overlay .sheet { background:#fff; border-radius:12px; max-width:760px; width:92%; max-height:86vh; overflow:auto; padding:1.2rem 1.4rem; }
-  #overlay h3 { margin:.1rem 0 .6rem; }
-  #overlay .close { float:right; border:0; background:none; font-size:1.1rem; cursor:pointer; color:var(--muted); }
-  .artifact { display:inline-block; margin:.25rem .5rem .25rem 0; }
-  dl.meta { display:grid; grid-template-columns:auto 1fr; gap:.2rem .8rem; font-size:.9rem; }
-  dl.meta dt { color:var(--muted); }
+  #overlay .sheet {
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    max-width:760px; width:100%; max-height:92vh; overflow:auto; padding:1.1rem 1.3rem;
+    box-shadow:0 12px 40px rgba(0,0,0,.6);
+  }
+  #overlay h3 { margin:.1rem 0 .7rem; font-size:1.05rem; }
+  #overlay h4 { margin:1.1rem 0 .4rem; font:600 11px/1 var(--mono);
+    text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  #overlay .close { float:right; border:0; background:none; font-size:1.1rem;
+    cursor:pointer; color:var(--muted); padding:0 .2rem; }
+  #overlay .close:hover { color:var(--ink); }
+  #overlay pre {
+    white-space:pre-wrap; color:#c9d1d9; background:var(--canvas);
+    border:1px solid var(--line); border-radius:7px; padding:.6rem; font-size:12px;
+    max-height:280px; overflow:auto;
+  }
+  .artifact {
+    display:inline-block; margin:0 .4rem .4rem 0; border:1px solid var(--line);
+    background:var(--raised); color:var(--ink); border-radius:7px; padding:.35rem .6rem;
+    font-size:12px; text-decoration:none;
+  }
+  .artifact:hover { border-color:var(--amber); }
+  .artifact.evidence { border-color:rgba(217,119,6,.5); color:var(--amber-hi); }
+  dl.meta { display:grid; grid-template-columns:auto minmax(0,1fr); gap:.3rem .9rem; font-size:13px; margin:0; }
+  dl.meta dt { color:var(--muted); font:11px/1.5 var(--mono); text-transform:uppercase;
+    letter-spacing:.06em; padding-top:.15rem; }
   dl.meta dd { margin:0; }
-  .empty { color:var(--muted); padding:1rem; }
+  ul.outreach { margin:.3rem 0; padding-left:1.1rem; font-size:13px; }
+  ul.outreach li { margin:.25rem 0; }
+  .ostate.follow-up-due { color:var(--amber-hi); font-weight:600; }
+  .ostate.replied { color:var(--emerald); }
+  .empty { color:var(--dim); padding:.8rem 0; font-size:13px; }
+  .rescore {
+    border:1px solid var(--line); background:var(--raised); color:var(--ink);
+    border-radius:7px; padding:.35rem .7rem; font-size:12px; cursor:pointer;
+  }
+  .rescore:hover { border-color:var(--amber); }
 </style>
 </head>
 <body>
-<header>
-  <h1>Aja</h1><span class="sub" id="sub">job pipeline & chat — everything stays on this machine</span>
+
+<header class="topbar">
+  <span class="who" id="who">Aja</span>
+  <span class="where" id="where">job pipeline &amp; chat — everything stays on this machine</span>
+  <span class="stat" id="counts"><span class="dot"></span> <b>0</b> active</span>
+  <div class="search">
+    <input type="search" id="boardSearch" autocomplete="off" spellcheck="false"
+      placeholder="filter the board — company, role, req id…" aria-label="Filter the board">
+    <button class="clear" id="boardSearchClear" title="Clear the filter" style="display:none">✕</button>
+  </div>
 </header>
-<main>
-  <section class="card" id="actions">
-    <h2 id="actionsTitle">Needs you now</h2>
-    <div id="actionsBody"><div class="empty">loading…</div></div>
-  </section>
-  <section class="card" id="prefs">
-    <h2>Preferences the agent will ask about</h2>
-    <div class="row" id="prefsRow"><span class="empty">all set ✓</span></div>
-  </section>
-  <section class="card">
-    <h2>Pipeline</h2>
-    <div class="boardtools">
-      <input id="boardSearch" placeholder="filter the board: req id (R-…), company, title, or any term — e.g. AI, staff" autocomplete="off" spellcheck="false">
-      <button id="boardSearchClear" title="clear the filter" style="display:none">✕</button>
+
+<div class="shell">
+  <nav class="rail" aria-label="Sections">
+    <div class="mark" aria-hidden="true">A</div>
+    <button id="navBoard" aria-current="page" title="Pipeline board">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="14" rx="1"/></svg>
+      <span>Board</span>
+    </button>
+    <button id="navActions" title="Every decision that needs you">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span>Actions</span>
+      <span class="count" id="railCount" style="display:none">0</span>
+    </button>
+    <button id="navChat" title="Jump to the chat">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 8.5-8.4h.5a8.5 8.5 0 0 1 8 8.4z"/></svg>
+      <span>Chat</span>
+    </button>
+    <button disabled title="'learn' runs in the CLI — it reads your verdicts and outcomes. No view yet.">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+      <span>Learn</span>
+    </button>
+    <button disabled title="Settings live in applymate.config.json — no view yet.">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15a1.6 1.6 0 0 0-1.5-1H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 3 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9 3V1a2 2 0 1 1 4 0v.1A1.6 1.6 0 0 0 15 3a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 21 9h.1a2 2 0 1 1 0 4H21a1.6 1.6 0 0 0-1.6 2z"/></svg>
+      <span>Setup</span>
+    </button>
+    <div class="spacer"></div>
+    <button id="navStatus" title="Everything stays on this machine" style="cursor:default">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      <span>Local</span>
+    </button>
+  </nav>
+
+  <main class="pane" id="pane">
+
+    <!-- Board view -->
+    <div id="viewBoard">
+      <section class="triage">
+        <h1 class="bigcount" id="bigcount">—</h1>
+        <p class="subline" id="subline">loading…</p>
+        <div class="needcards" id="needcards"></div>
+      </section>
+
+      <section>
+        <div class="panelhead">
+          <h2>Pipeline</h2>
+          <span class="count" id="boardCount"></span>
+          <span class="hint">click a card for the full application · ✕ discards</span>
+        </div>
+        <div class="lanes" id="board"><div class="empty">loading…</div></div>
+      </section>
+
+      <section class="prefs">
+        <div class="panelhead" style="margin-bottom:0">
+          <h2>Preferences the agent will ask about</h2>
+        </div>
+        <div class="row" id="prefsRow"><span class="empty">all set ✓</span></div>
+      </section>
     </div>
-    <div id="board"><div class="empty">loading…</div></div>
-  </section>
-  <section class="card">
-    <h2>Chat with Aja</h2>
+
+    <!-- Actions view -->
+    <div id="viewActions" style="display:none">
+      <section class="triage">
+        <h1 class="bigcount" id="actionsCount">—</h1>
+        <p class="subline">every dated decision and follow-up, unabridged</p>
+      </section>
+      <div id="actionsBody"></div>
+    </div>
+
+  </main>
+
+  <aside class="chatpane">
+    <header>
+      <h2>Chat with Aja</h2>
+      <span class="sub">the agent's other side</span>
+    </header>
     <div id="chatlog"></div>
-    <form id="composer"><input id="say" placeholder="type a message; Enter sends" autocomplete="off"><button>Send</button></form>
-  </section>
-</main>
-<div id="overlay"><div class="sheet"><button class="close" onclick="closeSheet()">✕</button><div id="sheetBody"></div></div></div>
+    <form id="composer">
+      <input id="say" placeholder="type a message; Enter sends" autocomplete="off">
+      <button>Send</button>
+    </form>
+  </aside>
+</div>
+
+<div id="overlay"><div class="sheet">
+  <button class="close" onclick="closeSheet()" aria-label="Close">✕</button>
+  <div id="sheetBody"></div>
+</div></div>
+
 <script>
 const $ = (s) => document.querySelector(s);
 let lastId = 0;
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"\\""}[c]));
 
 async function jget(u){ return (await fetch(u)).json(); }
 async function jpost(u, body){ return (await fetch(u, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body)})).json(); }
 
+// The match grade maps to the pill palette: strong fits read emerald, borderline
+// amber, and anything under the relevance floor rose.
+function scoreClass(grade){
+  if (grade === "strong" || grade === "good") return "good";
+  if (grade === "fair") return "mid";
+  if (grade === "stretch") return "low";
+  return "";
+}
 function scoreBadge(score, grade){
   if (score === null || score === undefined) return "";
-  return '<span class="score ' + esc(grade||"") + '">' + esc(score) + '</span>';
+  return '<span class="pill match ' + scoreClass(grade||"") + '">' + esc(score) + " match</span>";
 }
 
 // Aja's conversion-odds verdict: green = push, amber = only with a referral, red = skip.
@@ -132,41 +438,15 @@ const PURSUIT_LEGEND = "green: push · amber: only with a warm referral · red: 
 function pursuitBadge(p){
   if (!p || !p.verdict) return "";
   const tip = PURSUIT_LEGEND + (p.note ? " — " + p.note : "");
-  return '<span class="pursuit ' + esc(p.verdict) + '" title="' + esc(tip) + '">' + esc(p.verdict) + '</span>';
+  return '<span class="pill pursuit ' + esc(p.verdict) + '" title="' + esc(tip) + '">' + esc(p.verdict) + "</span>";
 }
-
-async function refreshPrefs(){
-  const state = await jget("/api/state");
-  // keys are normalized ("candidatename"); greet the candidate by first name
-  const nameRec = (state.preferences||[]).find((p) => p.key === "candidatename");
-  if (nameRec && nameRec.value) $("#sub").textContent = String(nameRec.value) + " — job pipeline & chat — everything stays on this machine";
-  const row = $("#prefsRow");
-  const missing = state.missingPreferences || [];
-  if (!missing.length){ row.innerHTML = '<span class="empty">all set ✓ — the agent reads these before hunting</span>'; return; }
-  row.innerHTML = missing.map((k) =>
-    '<span class="chip">' + esc(k) +
-    '<form data-key="' + esc(k) + '"><input name="v" placeholder="your preference"><button>save</button></form></span>'
-  ).join("");
-  row.querySelectorAll("form").forEach((f) => f.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    await jpost("/api/prefs", { key: f.dataset.key, value: f.querySelector("input").value });
-    refreshPrefs();
-  }));
-}
-
-const STATUS_ORDER = ["discovered","matched","tailoring","ready","submitted","interviewing","offer","rejected","closed"];
-// appId → outreach messages linked to that application (from /api/state)
-let outreachByApp = {};
-// Discard shows only before real work attaches — after tailoring, closing a
-// card is a conversation with Aja, not a button.
-const DISCARDABLE = ["discovered", "matched"];
 
 function refBadge(appId){
   const msgs = outreachByApp[appId] || [];
   const refs = msgs.filter((m) => m.targetRole === "referrer");
-  if (refs.length) return '<span class="ref yes" title="referral outreach sent to ' + refs.length + ' people">refs ' + refs.length + '</span>';
-  if (msgs.length) return '<span class="ref no" title="outreach sent, but no referral yet">no ref</span>';
-  return '<span class="ref" title="no outreach logged for this application yet">no ref</span>';
+  if (refs.length) return '<span class="pill" title="referral outreach sent to ' + refs.length + ' people">refs ' + refs.length + "</span>";
+  if (msgs.length) return '<span class="pill match mid" title="outreach sent, but no referral yet">no ref</span>';
+  return '<span class="pill" title="no outreach logged for this application yet">no ref</span>';
 }
 
 function discardBtn(a){
@@ -182,49 +462,133 @@ let boardQuery = "";
 // auto-refresh tick) must never overwrite a newer filtered one.
 let boardFetch = 0;
 
-// "Needs you now": overdue decisions, due follow-ups, staged submits, and the
-// next deadlines — computed server-side from the full board, so a board-search
-// filter never hides an action. Clicking [app-id] opens that application.
-function appTag(id){
-  return ' <button class="applink" data-app="' + esc(id) + '" title="open the application sheet">[' + esc(id) + ']</button>';
+// Board-wide tally for the topbar. Never derived from a filtered fetch — a
+// filter narrows the board, it does not shrink the board.
+let boardTotals = null;
+
+async function refreshPrefs(){
+  const state = await jget("/api/state");
+  // keys are normalized ("candidatename"); greet the candidate by first name
+  const nameRec = (state.preferences||[]).find((p) => p.key === "candidatename");
+  if (nameRec && nameRec.value) $("#who").textContent = "Aja · " + String(nameRec.value);
+  const row = $("#prefsRow");
+  const missing = state.missingPreferences || [];
+  if (!missing.length){ row.innerHTML = '<span class="empty">all set ✓ — the agent reads these before hunting</span>'; return; }
+  row.innerHTML = missing.map((k) =>
+    '<span class="chip"><span class="k">' + esc(k) +
+    '</span><form data-key="' + esc(k) + '"><input name="v" placeholder="your preference"><button>save</button></form></span>'
+  ).join("");
+  row.querySelectorAll("form").forEach((f) => f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await jpost("/api/prefs", { key: f.dataset.key, value: f.querySelector("input").value });
+    refreshPrefs();
+  }));
 }
 
-function renderActions(state){
-  const body = $("#actionsBody");
-  const a = state.actions || {};
+// "Needs you now": overdue decisions, due follow-ups, staged submits, and the
+// next deadlines — computed server-side from the full board, so a board-search
+// filter never hides an action. The big count is the one thing that may not be
+// missed; the cards under it carry the detail.
+function appTag(id){
+  return ' <button class="applink" data-app="' + esc(id) + '">[' + esc(id) + ']</button>';
+}
+function bindAppTags(root){
+  root.querySelectorAll("button.applink").forEach((b) =>
+    b.addEventListener("click", (e) => { e.stopPropagation(); openApp(b.dataset.app); }));
+}
+
+function renderTriage(a){
   const dueRem = a.dueReminders || [];
   const dueFu = a.dueFollowUps || [];
   const staged = a.staged || [];
-  const upcoming = a.upcomingReminders || [];
   const count = dueRem.length + dueFu.length + staged.length;
-  $("#actionsTitle").textContent = "Needs you now" + (count ? " — " + count + " item" + (count === 1 ? "" : "s") : "");
-  if (!count && !upcoming.length){
-    body.innerHTML = '<div class="empty">nothing needs you — no overdue decisions, no follow-ups due, nothing staged ✓</div>';
+
+  const big = $("#bigcount");
+  big.textContent = count
+    ? count + (count === 1 ? " thing needs you" : " things need you")
+    : "Nothing is blocking";
+  big.classList.toggle("zero", count === 0);
+
+  $("#subline").textContent = count
+    ? dueRem.length + " overdue · " + dueFu.length + " follow-up" + (dueFu.length === 1 ? "" : "s") + " · " + staged.length + " awaiting your yes"
+    : "no overdue decisions, no follow-ups due, nothing staged";
+  $("#actionsCount").textContent = count
+    ? count + (count === 1 ? " thing needs you" : " things need you")
+    : "Nothing is blocking";
+
+  const railCount = $("#railCount");
+  railCount.textContent = count;
+  railCount.style.display = count ? "" : "none";
+
+  const items = [];
+  dueRem.forEach((r) => items.push({
+    kind: "decisions overdue", cls: "overdue", appId: r.appId || null,
+    title: r.title,
+    meta: "due " + String(r.dueAt).slice(0, 10) + (r.overdueDays ? " · " + r.overdueDays + "d overdue" : "") + (r.note ? " · " + r.note : ""),
+  }));
+  dueFu.forEach((m) => items.push({
+    kind: "referral follow-up", cls: "followup", appId: m.appId || null,
+    title: m.target + " · " + m.targetRole,
+    meta: "sent " + String(m.sentAt).slice(0, 10) + " · nudge not sent yet",
+  }));
+  staged.forEach((s) => items.push({
+    kind: "staged", cls: "staged", appId: s.id || null,
+    title: s.company + " — " + s.title,
+    meta: "tailored and staged · waiting on your explicit yes to submit",
+  }));
+
+  const cards = $("#needcards");
+  cards.innerHTML = items.map((it, i) =>
+    '<button class="needcard ' + it.cls + '" data-app="' + esc(it.appId || "") + '"' +
+    (it.appId ? ' title="open the application"' : ' title="no application is linked to this yet"') + ">" +
+      '<span class="top"><span class="kind">' + esc(it.kind) + "</span>" +
+      (items.length <= 9 ? "<kbd>" + (i + 1) + "</kbd>" : "") + "</span>" +
+      '<span class="title">' + esc(it.title) + "</span>" +
+      '<span class="meta">' + esc(it.meta) + "</span>" +
+    "</button>"
+  ).join("");
+  cards.querySelectorAll(".needcard").forEach((el) => el.addEventListener("click", () => {
+    if (el.dataset.app) openApp(el.dataset.app);
+  }));
+
+  const act = $("#actionsBody");
+  if (!items.length && !(a.upcomingReminders || []).length){
+    act.innerHTML = '<p class="empty">nothing needs you — no overdue decisions, no follow-ups due, nothing staged ✓</p>';
     return;
   }
-  let html = "";
-  if (dueRem.length){
-    html += '<div class="grp"><h4>Decisions overdue</h4><ul>' + dueRem.map((r) =>
-      '<li><span class="overdue">' + esc(r.title) + '</span>' + (r.appId ? appTag(r.appId) : '') +
-      ' <span class="when">due ' + esc(String(r.dueAt).slice(0, 10)) + (r.overdueDays ? ' · ' + esc(r.overdueDays) + 'd overdue' : '') + '</span>' +
-      (r.note ? '<br><span class="when">' + esc(r.note) + '</span>' : '') + '</li>').join("") + '</ul></div>';
-  }
-  if (dueFu.length){
-    html += '<div class="grp"><h4>Referral follow-ups due (the one nudge)</h4><ul>' + dueFu.map((m) =>
-      '<li>' + esc(m.target) + ' · ' + esc(m.targetRole) + (m.appId ? appTag(m.appId) : '') +
-      ' <span class="when">sent ' + esc(String(m.sentAt).slice(0, 10)) + '</span></li>').join("") + '</ul></div>';
-  }
-  if (staged.length){
-    html += '<div class="grp"><h4>Staged — awaiting your submit yes</h4><ul>' + staged.map((s) =>
-      '<li>' + esc(s.company) + ' — ' + esc(s.title) + appTag(s.id) + '</li>').join("") + '</ul></div>';
-  }
-  if (upcoming.length){
-    html += '<div class="grp"><h4>Coming up</h4><ul>' + upcoming.map((r) =>
-      '<li>' + esc(r.title) + (r.appId ? appTag(r.appId) : '') +
-      ' <span class="when">due ' + esc(String(r.dueAt).slice(0, 10)) + '</span></li>').join("") + '</ul></div>';
-  }
-  body.innerHTML = html;
-  body.querySelectorAll("button.applink").forEach((b) => b.addEventListener("click", () => openApp(b.dataset.app)));
+  const group = (heading, rows) => rows.length
+    ? '<div class="actgrp"><h3>' + heading + '</h3><ul>' + rows.join("") + "</ul></div>" : "";
+  act.innerHTML =
+    group("Decisions overdue", dueRem.map((r) =>
+      '<li><span><span class="overdue">' + esc(r.title) + "</span>" +
+      (r.appId ? appTag(r.appId) : "") + (r.note ? '<br><span style="color:var(--muted)">' + esc(r.note) + "</span>" : "") +
+      '</span><span class="when">due ' + esc(String(r.dueAt).slice(0, 10)) +
+      (r.overdueDays ? " · " + r.overdueDays + "d overdue" : "") + "</span></li>")) +
+    group("Referral follow-ups due (the one nudge)", dueFu.map((m) =>
+      "<li><span>" + esc(m.target) + " · " + esc(m.targetRole) +
+      (m.appId ? appTag(m.appId) : "") + '</span><span class="when">sent ' + esc(String(m.sentAt).slice(0, 10)) + "</span></li>")) +
+    group("Staged — awaiting your submit yes", staged.map((s) =>
+      '<li><span>' + esc(s.company) + " — " + esc(s.title) + appTag(s.id) +
+      '</span><span class="when">not yet submitted</span></li>')) +
+    group("Coming up", (a.upcomingReminders || []).map((r) =>
+      "<li><span>" + esc(r.title) + (r.appId ? appTag(r.appId) : "") +
+      '</span><span class="when">due ' + esc(String(r.dueAt).slice(0, 10)) + "</span></li>"));
+  bindAppTags(act);
+}
+
+const STATUS_ORDER = ["discovered","matched","tailoring","ready","submitted","interviewing","offer","rejected","closed"];
+// appId → outreach messages linked to that application (from /api/state)
+let outreachByApp = {};
+// Discard shows only before real work attaches — after tailoring, closing a
+// card is a conversation with Aja, not a button.
+const DISCARDABLE = ["discovered", "matched"];
+
+function matchGrade(score){
+  if (score === null || score === undefined) return "";
+  if (score >= 85) return "strong";
+  if (score >= 70) return "good";
+  if (score >= 60) return "fair";
+  return "stretch";
 }
 
 async function refreshBoard(){
@@ -236,29 +600,46 @@ async function refreshBoard(){
     if (!m.appId) continue;
     (outreachByApp[m.appId] = outreachByApp[m.appId] || []).push(m);
   }
-  renderActions(state);
+  renderTriage(state.actions || {});
+
   const board = state.pipeline || {};
   let total = 0;
-  const html = STATUS_ORDER.filter((s) => (board[s]||[]).length).map((s) =>
-    '<div class="status"><h3>' + esc(s) + '</h3>' +
-    board[s].map((a) => {
-      total++;
-      return (
-      '<div class="job" data-id="' + esc(a.id) + '" data-job="' + esc(a.jobId) + '" onclick="openApp(\\'' + esc(a.id) + '\\')">' +
-      scoreBadge(a.matchScore) +
-      pursuitBadge(a.pursuit) +
-      discardBtn(a) +
-      refBadge(a.id) +
-      '<div class="t">' + esc(a.company) + '</div>' +
-      '<div class="c">' + esc(a.title) +
-      (a.jobUrl ? ' <a class="req" target="_blank" rel="noopener" href="' + esc(a.jobUrl) + '" onclick="event.stopPropagation()" title="open the requisition page">req ↗</a>' : '') +
-      '</div></div>'
-      );
-    }).join("") + '</div>'
-  ).join("");
-  $("#board").innerHTML = (html || (boardQuery
+  const html = STATUS_ORDER.filter((s) => (board[s]||[]).length).map((s) => {
+    const cards = board[s];
+    total += cards.length;
+    return '<div class="lane"><h3>' + esc(s) + '<span class="n">' + cards.length + "</span></h3>" +
+      '<div class="cards">' + cards.map((a) =>
+        '<div class="card" data-id="' + esc(a.id) + '" data-job="' + esc(a.jobId) + '" onclick="openApp(\\'' + esc(a.id) + '\\')">' +
+          '<div class="tags">' + scoreBadge(a.matchScore, matchGrade(a.matchScore)) +
+            pursuitBadge(a.pursuit) + '<span class="spacer"></span>' + discardBtn(a) + "</div>" +
+          '<div class="co">' + esc(a.company) + "</div>" +
+          '<div class="role">' + esc(a.title) +
+            (a.jobUrl ? ' <a class="req" target="_blank" rel="noopener" href="' + esc(a.jobUrl) +
+              '" onclick="event.stopPropagation()" title="open the requisition page">req ↗</a>' : "") +
+          "</div>" +
+          '<div class="tags">' + refBadge(a.id) + "</div>" +
+        "</div>"
+      ).join("") + "</div></div>";
+  }).join("");
+
+  $("#board").innerHTML = html || (boardQuery
     ? '<div class="empty">no cards match "' + esc(boardQuery) + '" — clear the filter to see the whole board</div>'
-    : '<div class="empty">no applications yet — ask Aja to find jobs</div>'));
+    : '<div class="empty">no applications yet — ask Aja to find jobs</div>');
+  $("#boardCount").textContent = total ? total + " application" + (total === 1 ? "" : "s") : "";
+  // The topbar tally is about the board, not the view, so a board filter must
+  // not shrink it. Only an unfiltered fetch can update it; while filtering we
+  // keep the last full-board numbers rather than issue a second request a tick.
+  if (!boardQuery){
+    boardTotals = {
+      active: (board.discovered||[]).length + (board.matched||[]).length + (board.tailoring||[]).length,
+      interviewing: (board.interviewing||[]).length + (board.offer||[]).length,
+    };
+  }
+  if (boardTotals){
+    $("#counts").innerHTML = '<span class="dot"></span> <b>' + boardTotals.active +
+      "</b> active · <b>" + boardTotals.interviewing + "</b> interviewing";
+  }
+
   $("#boardSearchClear").style.display = boardQuery ? "" : "none";
   $("#board").querySelectorAll("button.discard").forEach((b) => b.addEventListener("click", async () => {
     if (!confirm("Discard this role? The card moves to Closed (a fresh application can be opened later for the same job).")) return;
@@ -283,63 +664,100 @@ $("#boardSearchClear").addEventListener("click", () => {
   $("#boardSearch").focus();
 });
 
+// 1-9 focus a needs-you card. It opens the application for review — it never
+// acts. Nothing on this surface may send, submit, or discard without a click
+// on the thing itself.
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  if ($("#overlay").classList.contains("open")) return;
+  const n = Number(e.key);
+  if (!n || n > 9) return;
+  const cards = [...document.querySelectorAll("#needcards .needcard")];
+  if (cards[n - 1]) { e.preventDefault(); cards[n - 1].click(); }
+});
+
+// The rail is a view switcher over data the page already has — no extra calls.
+function showView(name){
+  const board = name === "board";
+  $("#viewBoard").style.display = board ? "" : "none";
+  $("#viewActions").style.display = board ? "none" : "";
+  $("#navBoard").setAttribute("aria-current", board ? "page" : "false");
+  $("#navActions").setAttribute("aria-current", board ? "false" : "page");
+  $("#pane").scrollTop = 0;
+}
+$("#navBoard").addEventListener("click", () => showView("board"));
+$("#navActions").addEventListener("click", () => showView("actions"));
+$("#navChat").addEventListener("click", () => { $("#say").focus(); });
+
 async function openApp(id){
   const app = await jget("/api/application/" + id);
   const job = app.job || {};
   const arts = Object.entries(app.artifacts || {}).filter(([,p]) => p)
-    .map(([k,p]) => '<a class="artifact btn" target="_blank" href="/api/artifact?path=' + encodeURIComponent(p) + '">open ' + esc(k) + '</a>').join("");
+    .map(([k,p]) => '<a class="artifact" target="_blank" href="/api/artifact?path=' + encodeURIComponent(p) + '">open ' + esc(k) + "</a>").join("");
   const evidence = (app.evidence||[]).map((e) =>
-    '<a class="artifact btn" style="background:#dd6b20" target="_blank" href="/api/artifact?path=' + encodeURIComponent(e.path) + '" title="' + esc(e.at) + '">' + esc(e.kind) + '</a>'
+    '<a class="artifact evidence" target="_blank" href="/api/artifact?path=' + encodeURIComponent(e.path) + '" title="' + esc(e.at) + '">' + esc(e.kind) + "</a>"
   ).join("");
   const outreach = (app.outreach||[]);
   const outreachHtml = outreach.length
     ? '<h4>Outreach</h4><ul class="outreach">' + outreach.map((m) =>
-        '<li><strong>' + esc(m.target) + '</strong> · ' + esc(m.targetRole) + ' · ' + esc(m.channel) +
-        ' · <span class="ostate ' + esc(m.state) + '">' + esc(m.state) + '</span>' +
-        ' · sent ' + esc(String(m.sentAt).slice(0, 10)) +
-        (m.note ? ' — ' + esc(m.note) : '') + '</li>'
-      ).join("") + '</ul>'
+        "<li><strong>" + esc(m.target) + "</strong> · " + esc(m.targetRole) + " · " + esc(m.channel) +
+        ' · <span class="ostate ' + esc(m.state) + '">' + esc(m.state) + "</span>" +
+        " · sent " + esc(String(m.sentAt).slice(0, 10)) +
+        (m.note ? " — " + esc(m.note) : "") + "</li>"
+      ).join("") + "</ul>"
     : '<p class="empty">no outreach or referral logged for this application yet</p>';
   $("#sheetBody").innerHTML =
-    '<h3>' + esc(job.company||"?") + ' — ' + esc(job.title||"?") + '</h3>' +
+    "<h3>" + esc(job.company||"?") + " — " + esc(job.title||"?") + "</h3>" +
     '<dl class="meta">' +
-    '<dt>status</dt><dd>' + esc(app.status) + '</dd>' +
-    '<dt>match</dt><dd>' + (app.matchScore ?? job.matchScore ?? "not scored") + '</dd>' +
-    '<dt>pursuit</dt><dd>' + (app.pursuit
-      ? '<span class="pursuit ' + esc(app.pursuit.verdict) + '" style="float:none" title="' + esc(PURSUIT_LEGEND) + '">' + esc(app.pursuit.verdict) + '</span>' +
-        (app.pursuit.note ? ' — ' + esc(app.pursuit.note) : '')
-      : 'not assessed') + '</dd>' +
-    '<dt>posting</dt><dd>' + (job.url
-      ? '<a target="_blank" rel="noopener" href="' + esc(job.url) + '">open requisition ↗</a>'
-      : '-') + '</dd>' +
-    '<dt>resume source</dt><dd>' + esc(app.resumeRef || "-") + '</dd>' +
-    '<dt>submitted</dt><dd>' + (app.submittedAt
-      ? esc(app.submittedAt) + (app.submissionPortal ? ' via ' + esc(app.submissionPortal) : '') + (app.submissionConfirmation ? ' · conf ' + esc(app.submissionConfirmation) : '')
-      : 'not yet') + '</dd>' +
-    '</dl>' +
-    (evidence ? '<h4>Evidence</h4>' + evidence : '') +
+      "<dt>status</dt><dd>" + esc(app.status) + "</dd>" +
+      "<dt>match</dt><dd>" + (app.matchScore ?? job.matchScore ?? "not scored") + "</dd>" +
+      "<dt>pursuit</dt><dd>" + (app.pursuit
+        ? pursuitBadge(app.pursuit).replace('class="pill pursuit', 'class="pill pursuit" style="display:inline-flex"') +
+          (app.pursuit.note ? " — " + esc(app.pursuit.note) : "")
+        : "not assessed") + "</dd>" +
+      "<dt>posting</dt><dd>" + (job.url
+        ? '<a target="_blank" rel="noopener" href="' + esc(job.url) + '">open requisition ↗</a>'
+        : "-") + "</dd>" +
+      "<dt>resume</dt><dd>" + esc(app.resumeRef || "-") + "</dd>" +
+      "<dt>submitted</dt><dd>" + (app.submittedAt
+        ? esc(app.submittedAt) + (app.submissionPortal ? " via " + esc(app.submissionPortal) : "") +
+          (app.submissionConfirmation ? " · conf " + esc(app.submissionConfirmation) : "")
+        : "not yet") + "</dd>" +
+    "</dl>" +
+    '<div class="btnrow"><button class="rescore" onclick="rescore(\\'' + esc(job.id || "") + '\\')">re-score against the dossier</button></div>' +
+    (evidence ? "<h4>Evidence</h4>" + evidence : "") +
     outreachHtml +
-    (arts ? '<h4>Artifacts</h4>' + arts : '<p class="empty">no artifacts yet</p>') +
-    '<h4>Job description</h4><pre style="white-space:pre-wrap">' + esc(job.description||"") + '</pre>';
+    (arts ? "<h4>Artifacts</h4>" + arts : '<p class="empty">no artifacts yet</p>') +
+    "<h4>Job description</h4><pre>" + esc(job.description||"") + "</pre>";
   $("#overlay").classList.add("open");
 }
 async function rescore(jobId){
+  if (!jobId) return;
   await jpost("/api/match", { jobId });
   closeSheet(); refreshBoard();
 }
 function closeSheet(){ $("#overlay").classList.remove("open"); }
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeSheet();
+});
+$("#overlay").addEventListener("click", (e) => {
+  if (e.target.id === "overlay") closeSheet();
+});
 
 function bubble(m){
   const div = document.createElement("div");
   div.className = "bubble " + m.from;
-  div.innerHTML = '<span class="who">' + m.from + '</span>' + esc(m.text);
+  div.innerHTML = '<span class="who">' + esc(m.from) + "</span>" + esc(m.text);
   return div;
 }
 async function refreshChat(){
   const msgs = await jget("/api/chat?since=" + lastId);
   const log = $("#chatlog");
-  for (const m of msgs){ log.appendChild(bubble(m)); lastId = Math.max(lastId, m.id); }
-  if (msgs.length) log.scrollTop = log.scrollHeight;
+  let grew = false;
+  for (const m of msgs){ log.appendChild(bubble(m)); lastId = Math.max(lastId, m.id); grew = true; }
+  if (grew) log.scrollTop = log.scrollHeight;
 }
 
 $("#composer").addEventListener("submit", async (e) => {
