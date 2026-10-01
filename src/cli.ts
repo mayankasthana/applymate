@@ -109,6 +109,21 @@ async function cmdInit({ io, rootDir }: CommandContext): Promise<number> {
   line(io, `workspace ready at ${paths.root}`);
   line(io, `next: applymate config set --key dossierDir --value ~/path/to/your/dossier`);
   line(io, `then: applymate dossier index`);
+  // Seed the starter note so a fresh clone has the skeleton rather than a bare
+  // "no note named" error. Never overwrites: a filled-in note is the
+  // candidate's work and re-running init must not clobber it.
+  const { profile } = makeServices(config);
+  if ((await profile.missingNotes()).length) {
+    const template = join(rootDir, "templates", "resume-standards.md");
+    try {
+      const body = await readFile(template, "utf8");
+      await profile.setNote("resume-standards", body);
+      line(io, `seeded profile note "resume-standards" from templates/ — fill it in, then:`);
+      line(io, `  applymate profile note export resume-standards <file>   # keep a copy outside git`);
+    } catch {
+      line(io, `note: templates/resume-standards.md not found; create the note by hand when you need it`);
+    }
+  }
   return 0;
 }
 
@@ -362,6 +377,16 @@ async function cmdProfileNote({ pos, io, rootDir }: CommandContext): Promise<num
     for (const n of notes) line(io, `${n.name}  (updated ${n.updatedAt})`);
     return 0;
   }
+  if (action === "missing") {
+    const { profile } = await services(rootDir);
+    const missing = await profile.missingNotes();
+    if (!missing.length) {
+      line(io, "(all recommended notes are present)");
+      return 0;
+    }
+    for (const n of missing) line(io, n);
+    return 0;
+  }
   if (action === "get") {
     if (!name) return failWith(io, "profile note get <name>", "missing note name");
     const { profile } = await services(rootDir);
@@ -380,7 +405,20 @@ async function cmdProfileNote({ pos, io, rootDir }: CommandContext): Promise<num
     line(io, `${note.name}: stored ${body.length} chars (updated ${note.updatedAt})`);
     return 0;
   }
-  return failWith(io, "profile note <set|get|list>", `unknown action "${action ?? ""}"`);
+  if (action === "export") {
+    // The note is gitignored by design, which also means git is not its backup.
+    // Export writes it somewhere the candidate controls.
+    if (!name || !source) {
+      return failWith(io, "profile note export <name> <file.md>", "need a note name and a destination file");
+    }
+    const { profile } = await services(rootDir);
+    const note = await profile.getNote(name);
+    if (!note) return failWith(io, "profile note export <name> <file.md>", `no note named "${name}"`);
+    await writeFile(resolve(rootDir, source), note.body, "utf8");
+    line(io, `${note.name} -> ${source} (${note.body.length} chars)`);
+    return 0;
+  }
+  return failWith(io, "profile note <set|get|list|missing|export>", `unknown action "${action ?? ""}"`);
 }
 
 async function cmdAppArtifact({ pos, io, rootDir }: CommandContext): Promise<number> {

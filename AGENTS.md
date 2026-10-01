@@ -51,6 +51,7 @@ Run in order; do not skip:
 
 ```
 node bin/applymate.ts prefs missing      # which candidate decisions are unset?
+node bin/applymate.ts profile note missing   # which candidate-owned docs are unset?
 node bin/applymate.ts chat poll --since <lastKnownId>   # messages sent while you were away
 node bin/applymate.ts reminders list --due   # dated decisions that have come due
 node bin/applymate.ts pipeline           # current board
@@ -62,6 +63,13 @@ node bin/applymate.ts pipeline           # current board
   service-based), `salaryFloor`, `workMode`, `locations`, `seniority`. Never
   guess these; they are the candidate's calls.
   Store each answer: `node bin/applymate.ts prefs set <key> <value> --source chat`.
+- If `profile note missing` prints `resume-standards`, **say so before drafting
+  anything.** That note holds the candidate's own rules (which projects and
+  open-source work to name, the wording rules, the filename convention), and it
+  lives in the gitignored workspace — so a fresh clone, a new machine, or a
+  wiped workspace all start without it. Ask the candidate for it, or point them
+  at `templates/resume-standards.md` to fill in. Never reconstruct it from
+  memory or from the dossier, and never proceed to a draft without it.
 - Handle any queued chat messages before doing anything else.
 - **If `reminders list --due` prints anything, surface every item in your first
   reply to the candidate** — what's due, which application, what decision it
