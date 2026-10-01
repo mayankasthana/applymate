@@ -187,6 +187,41 @@ test("state and application endpoints surface outreach/referral status", async (
   });
 });
 
+test("state endpoint aggregates actions: overdue decisions, follow-ups due, staged apps, upcoming", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const job = await services.pipeline.addJob({ company: "Acme", title: "SRE", description: "Kafka" });
+    const app = await services.pipeline.startApplication(job.id);
+    // walk to ready: matched -> tailoring -> ready (gates on a resume artifact)
+    await services.pipeline.move(app.id, "matched");
+    await services.pipeline.move(app.id, "tailoring");
+    await services.pipeline.attachArtifact(app.id, "resume", "applications/x/resume.md");
+    await services.pipeline.move(app.id, "ready");
+    // an overdue decision and an upcoming one
+    await services.reminders.add({ title: "old fallback", dueAt: "2020-01-01", appId: app.id }, { now: "2019-12-01T00:00:00.000Z" });
+    await services.reminders.add({ title: "future clock", dueAt: "2099-01-01", appId: app.id }, { now: "2019-12-01T00:00:00.000Z" });
+    // a follow-up past its 4–5 day window
+    const tenDaysAgo = new Date(Date.now() - 10 * 86_400_000).toISOString();
+    await services.outreach.log({ target: "Jane Referrer", targetRole: "referrer", channel: "dm", appId: app.id }, { now: tenDaysAgo });
+
+    const state = (await (await fetch(base + "/api/state")).json()) as {
+      actions: {
+        dueReminders: { title: string; overdueDays: number }[];
+        upcomingReminders: { title: string }[];
+        dueFollowUps: { target: string; state: string }[];
+        staged: { id: string; company: string }[];
+      };
+    };
+    assert.deepEqual(state.actions.dueReminders.map((r) => r.title), ["old fallback"]);
+    assert.ok(state.actions.dueReminders[0]!.overdueDays > 0);
+    assert.deepEqual(state.actions.upcomingReminders.map((r) => r.title), ["future clock"]);
+    assert.equal(state.actions.dueFollowUps.length, 1);
+    assert.equal(state.actions.dueFollowUps[0]!.target, "Jane Referrer");
+    assert.equal(state.actions.dueFollowUps[0]!.state, "follow-up-due");
+    assert.ok(state.actions.staged.some((s) => s.id === app.id && s.company === "Acme"));
+  });
+});
+
 test("artifact endpoint renders workspace markdown and blocks path escape", async () => {
   await withServer(async ({ base, config }) => {
     const services = makeServices(config);

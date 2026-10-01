@@ -60,12 +60,16 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
   }
 
   if (method === "GET" && path === "/api/state") {
-    const [pipeline, prefs, missing, outreach] = await Promise.all([
+    const [pipeline, prefs, missing, outreach, dueReminders, openReminders, dueFollowUps] = await Promise.all([
       services.pipeline.pipeline(),
       services.profile.preferences(),
       services.profile.missingPreferences(),
       services.outreach.list({ all: true }),
+      services.reminders.list({ due: true }),
+      services.reminders.list(),
+      services.outreach.list({ due: true }),
     ]);
+    const now = Date.now();
     return sendJson(res, 200, {
       // the board search box: ?q= filters cards (req id, company, free terms)
       pipeline: filterBoard(pipeline, url.searchParams.get("q")),
@@ -74,6 +78,17 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
       outreach: outreach.map((m) => withState(m)),
       latestMessageId: await services.chat.latestId(),
       dossierIndexed: await fileExists(services.paths.dossierIndex),
+      // the "what do you need from me" panel — computed from the full board,
+      // so a board search filter never hides an action
+      actions: {
+        dueReminders: dueReminders.map((r) => ({
+          ...r,
+          overdueDays: Math.max(0, Math.floor((now - Date.parse(r.dueAt)) / 86_400_000)),
+        })),
+        upcomingReminders: openReminders.filter((r) => Date.parse(r.dueAt) > now).slice(0, 5),
+        dueFollowUps: dueFollowUps.map((m) => withState(m)),
+        staged: pipeline.ready ?? [],
+      },
     });
   }
 

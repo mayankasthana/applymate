@@ -57,6 +57,15 @@ export const UI_HTML = `<!doctype html>
   .ostate.replied { color:var(--ok); }
   ul.outreach { margin:.3rem 0; padding-left:1.1rem; }
   ul.outreach li { margin:.2rem 0; }
+  #actions { grid-column: 1 / -1; }
+  #actions .grp { padding:.55rem 1rem; border-bottom:1px solid var(--line); }
+  #actions .grp:last-child { border-bottom:0; }
+  #actions h4 { margin:.15rem 0 .3rem; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  #actions ul { margin:0; padding-left:1.1rem; }
+  #actions li { margin:.18rem 0; }
+  #actions .overdue { color:#c05621; font-weight:600; }
+  #actions .when { color:var(--muted); font-size:.85rem; }
+  #actions .applink { color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:0; font:inherit; font-size:.85rem; padding:0; }
   #chatlog { height:60vh; overflow-y:auto; padding:.8rem; display:flex; flex-direction:column; gap:.45rem; }
   .bubble { max-width:88%; padding:.5rem .75rem; border-radius:12px; white-space:pre-wrap; word-wrap:break-word; }
   .bubble.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
@@ -82,6 +91,10 @@ export const UI_HTML = `<!doctype html>
   <h1>Aja</h1><span class="sub" id="sub">job pipeline & chat — everything stays on this machine</span>
 </header>
 <main>
+  <section class="card" id="actions">
+    <h2 id="actionsTitle">Needs you now</h2>
+    <div id="actionsBody"><div class="empty">loading…</div></div>
+  </section>
   <section class="card" id="prefs">
     <h2>Preferences the agent will ask about</h2>
     <div class="row" id="prefsRow"><span class="empty">all set ✓</span></div>
@@ -169,6 +182,51 @@ let boardQuery = "";
 // auto-refresh tick) must never overwrite a newer filtered one.
 let boardFetch = 0;
 
+// "Needs you now": overdue decisions, due follow-ups, staged submits, and the
+// next deadlines — computed server-side from the full board, so a board-search
+// filter never hides an action. Clicking [app-id] opens that application.
+function appTag(id){
+  return ' <button class="applink" data-app="' + esc(id) + '" title="open the application sheet">[' + esc(id) + ']</button>';
+}
+
+function renderActions(state){
+  const body = $("#actionsBody");
+  const a = state.actions || {};
+  const dueRem = a.dueReminders || [];
+  const dueFu = a.dueFollowUps || [];
+  const staged = a.staged || [];
+  const upcoming = a.upcomingReminders || [];
+  const count = dueRem.length + dueFu.length + staged.length;
+  $("#actionsTitle").textContent = "Needs you now" + (count ? " — " + count + " item" + (count === 1 ? "" : "s") : "");
+  if (!count && !upcoming.length){
+    body.innerHTML = '<div class="empty">nothing needs you — no overdue decisions, no follow-ups due, nothing staged ✓</div>';
+    return;
+  }
+  let html = "";
+  if (dueRem.length){
+    html += '<div class="grp"><h4>Decisions overdue</h4><ul>' + dueRem.map((r) =>
+      '<li><span class="overdue">' + esc(r.title) + '</span>' + (r.appId ? appTag(r.appId) : '') +
+      ' <span class="when">due ' + esc(String(r.dueAt).slice(0, 10)) + (r.overdueDays ? ' · ' + esc(r.overdueDays) + 'd overdue' : '') + '</span>' +
+      (r.note ? '<br><span class="when">' + esc(r.note) + '</span>' : '') + '</li>').join("") + '</ul></div>';
+  }
+  if (dueFu.length){
+    html += '<div class="grp"><h4>Referral follow-ups due (the one nudge)</h4><ul>' + dueFu.map((m) =>
+      '<li>' + esc(m.target) + ' · ' + esc(m.targetRole) + (m.appId ? appTag(m.appId) : '') +
+      ' <span class="when">sent ' + esc(String(m.sentAt).slice(0, 10)) + '</span></li>').join("") + '</ul></div>';
+  }
+  if (staged.length){
+    html += '<div class="grp"><h4>Staged — awaiting your submit yes</h4><ul>' + staged.map((s) =>
+      '<li>' + esc(s.company) + ' — ' + esc(s.title) + appTag(s.id) + '</li>').join("") + '</ul></div>';
+  }
+  if (upcoming.length){
+    html += '<div class="grp"><h4>Coming up</h4><ul>' + upcoming.map((r) =>
+      '<li>' + esc(r.title) + (r.appId ? appTag(r.appId) : '') +
+      ' <span class="when">due ' + esc(String(r.dueAt).slice(0, 10)) + '</span></li>').join("") + '</ul></div>';
+  }
+  body.innerHTML = html;
+  body.querySelectorAll("button.applink").forEach((b) => b.addEventListener("click", () => openApp(b.dataset.app)));
+}
+
 async function refreshBoard(){
   const me = ++boardFetch;
   const state = await jget("/api/state" + (boardQuery ? "?q=" + encodeURIComponent(boardQuery) : ""));
@@ -178,6 +236,7 @@ async function refreshBoard(){
     if (!m.appId) continue;
     (outreachByApp[m.appId] = outreachByApp[m.appId] || []).push(m);
   }
+  renderActions(state);
   const board = state.pipeline || {};
   let total = 0;
   const html = STATUS_ORDER.filter((s) => (board[s]||[]).length).map((s) =>
