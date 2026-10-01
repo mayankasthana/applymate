@@ -152,6 +152,24 @@ textbox via `getByRole("textbox")` (count 1) and `click()` it → `cua.type` the
 → confirm the live counter matches the intended length → dispatch the Send click.
 Verified 4/4 with the evaluator-dispatched Send on 2026-10-01.
 
+**Confirming an invite actually landed — read Pending after a reload (2026-10-01, 3/3).**
+The profile's "Pending, click to withdraw…" marker is the ground truth, but a
+read taken immediately after sending is unreliable: on the same profile it
+returned `Pending` once, then `no Pending in text` on the next call, because the
+header re-rendered. **Always `tab.reload()` + `waitForLoadState` before reading
+the marker**, and read the header block rather than a boolean over the whole
+body (the word "Connect" also appears in page copy, so a naive `/Connect/` test
+is a false alarm). Note `https://www.linkedin.com/invitations/` is **not** a real
+path (404, "Unknown Host") — the profile is the only reliable check.
+
+**The invite note textarea resists locator clicks (2026-10-01).** `locator('textarea').click()`
+times out on the `preload/custom-invite` dialog, same as the portal behaviour in
+[phenom.md](phenom.md). The working path is the familiar one: `evaluate` the
+rect, then `cua.move` + `cua.click`, and confirm with
+`document.activeElement.tagName === 'TEXTAREA'` before typing. Keep the documented
+order — deep-shadow click "Add a note" → **separate call** → focus the textarea →
+`cua.type` → compare `textarea.value` against the intended string → dispatch Send.
+
 ## Post search — informal "we're hiring" posts (verified 2026-10-01)
 
 **Goal:** surface reqs that exist only as a feed post (a recruiter or hiring
