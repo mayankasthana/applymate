@@ -21,6 +21,32 @@ export class RelevanceError extends Error {
 
 const ARTIFACT_KINDS: ReadonlySet<string> = new Set(["resume", "coverLetter", "notes"]);
 
+/** Days without a touch before an application is treated as rotting backlog. */
+export const DEFAULT_STALE_DAYS = 14;
+
+/**
+ * Pre-submission states where an untouched card is a decision nobody made yet.
+ * Once an application is submitted the wait is the employer's, not the agent's.
+ */
+export const STALE_BACKLOG: ReadonlySet<Status> = new Set<Status>(["discovered", "matched", "tailoring", "ready"]);
+
+export function daysSince(iso: string | null | undefined, now = Date.now()): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Math.floor((now - t) / 86_400_000));
+}
+
+/** An application is stale when it sits in the backlog untouched past the threshold. */
+export function isStale(
+  app: { status: Status; lastMovedAt: string },
+  { now = Date.now(), staleDays = DEFAULT_STALE_DAYS }: { now?: number; staleDays?: number } = {}
+): boolean {
+  if (!STALE_BACKLOG.has(app.status)) return false;
+  const age = daysSince(app.lastMovedAt, now);
+  return age !== null && age >= staleDays;
+}
+
 export interface AppSummary {
   id: string;
   jobId: string;
@@ -31,6 +57,10 @@ export interface AppSummary {
   pursuit: Pursuit | null;
   resumeRef: string | null;
   updatedAt: string;
+  /** When the card last changed status — what "sitting in the backlog" means.
+   *  `updatedAt` alone is misleading: scoring or a verdict bumps it without any
+   *  decision being made. */
+  lastMovedAt: string;
   jobUrl: string | null;
 }
 
@@ -221,6 +251,7 @@ async attachArtifact(id: string, kind: "resume" | "coverLetter" | "notes", relPa
         pursuit: app.pursuit ?? null,
         resumeRef: app.resumeRef,
         updatedAt: app.updatedAt,
+        lastMovedAt: app.history.length ? app.history[app.history.length - 1]!.at : app.createdAt,
         jobUrl: job?.url ?? null,
       });
     }

@@ -12,6 +12,8 @@ import { type PrefValue } from "./services/profile.ts";
 import { buildFormSpec } from "./form-spec.ts";
 import { checkRigServices, DEFAULT_RIG_ENDPOINTS } from "./services/rig.ts";
 import { outreachState, withState, referralCounts } from "./services/outreach.ts";
+import { buildLearnReport, renderLearnText } from "./services/learn.ts";
+import { daysSince, isStale, DEFAULT_STALE_DAYS, type AppSummary } from "./services/pipeline.ts";
 import { reminderState } from "./services/reminders.ts";
 import { followUpDueAt } from "./domain.ts";
 import { type Job, type Evidence } from "./domain.ts";
@@ -333,6 +335,54 @@ async function cmdAppPursuit({ pos, flags, io, rootDir }: CommandContext): Promi
   return 0;
 }
 
+async function cmdLearn({ flags, io, rootDir }: CommandContext): Promise<number> {
+  const svc = await services(rootDir);
+  const [apps, jobs] = await Promise.all([svc.applications.list(), svc.jobs.list()]);
+  const report = buildLearnReport(apps, {
+    jobs,
+    minMatchScore: svc.config.minMatchScore,
+    ...(flags.sample ? { sampleSize: Number(flags.sample) } : {}),
+  });
+  if (flags.json) return jsonOut(io, report);
+  line(io, renderLearnText(report));
+  if (flags.limit) {
+    const n = Number(flags.limit);
+    for (const s of report.suggestions) {
+      if (s.appIds?.length) line(io, `\n${s.kind}: ${s.appIds.slice(0, n).join(", ")}`);
+    }
+  }
+  return 0;
+}
+
+async function cmdProfileNote({ pos, io, rootDir }: CommandContext): Promise<number> {
+  const [action, name, source] = pos;
+  if (action === "list") {
+    const { profile } = await services(rootDir);
+    const notes = await profile.notes();
+    for (const n of notes) line(io, `${n.name}  (updated ${n.updatedAt})`);
+    return 0;
+  }
+  if (action === "get") {
+    if (!name) return failWith(io, "profile note get <name>", "missing note name");
+    const { profile } = await services(rootDir);
+    const note = await profile.getNote(name);
+    if (!note) return failWith(io, "profile note get <name>", `no note named "${name}"`);
+    line(io, note.body);
+    return 0;
+  }
+  if (action === "set") {
+    if (!name || !source) {
+      return failWith(io, "profile note set <name> <file.md>", "need a note name and a source file");
+    }
+    const body = await readFile(resolve(rootDir, source), "utf8");
+    const { profile } = await services(rootDir);
+    const note = await profile.setNote(name, body);
+    line(io, `${note.name}: stored ${body.length} chars (updated ${note.updatedAt})`);
+    return 0;
+  }
+  return failWith(io, "profile note <set|get|list>", `unknown action "${action ?? ""}"`);
+}
+
 async function cmdAppArtifact({ pos, io, rootDir }: CommandContext): Promise<number> {
   const [id, kind, path] = pos;
   if (!id || !kind || !path) {
@@ -392,26 +442,49 @@ async function cmdPipeline({ flags, io, rootDir }: CommandContext): Promise<numb
   const { pipeline, outreach: outreachSvc } = await services(rootDir);
   const [board, msgs] = await Promise.all([pipeline.pipeline(), outreachSvc.list({ all: true })]);
   const refs = referralCounts(msgs);
+  const now = Date.now();
+  const staleDays = flags.staleDays ? Number(flags.staleDays) : DEFAULT_STALE_DAYS;
+  const isStaleCard = (a: AppSummary) => isStale(a, { now, staleDays });
   if (flags.json) {
     const augmented = Object.fromEntries(
       Object.entries(board).map(([status, apps]) => [
         status,
-        apps.map((a) => ({ ...a, referrals: refs.get(a.id) ?? 0 })),
+        apps.map((a) => ({
+          ...a,
+          referrals: refs.get(a.id) ?? 0,
+          ageDays: daysSince(a.lastMovedAt, now),
+          stale: isStaleCard(a),
+        })),
       ])
     );
     return jsonOut(io, augmented);
   }
+  const onlyStale = Boolean(flags.stale);
   let total = 0;
+  let staleCount = 0;
   for (const [status, apps] of Object.entries(board)) {
     if (!apps.length) continue;
     line(io, `## ${status}`);
     for (const a of apps) {
+      const stale = isStaleCard(a);
+      if (stale) staleCount++;
+      if (onlyStale && !stale) continue;
       const n = refs.get(a.id) ?? 0;
-      line(io, `  ${a.id}  ${a.company} — ${a.title}${a.matchScore !== null ? `  [match ${a.matchScore}]` : ""}${a.pursuit ? `  [${a.pursuit.verdict}]` : ""}  [${n ? `refs ${n}` : "no refs"}]`);
+      const age = daysSince(a.lastMovedAt, now);
+      line(
+        io,
+        `  ${a.id}  ${a.company} — ${a.title}${a.matchScore !== null ? `  [match ${a.matchScore}]` : ""}${a.pursuit ? `  [${a.pursuit.verdict}]` : ""}  [${n ? `refs ${n}` : "no refs"}]${age !== null ? `  ${age}d${stale ? " STALE" : ""}` : ""}`
+      );
       total++;
     }
   }
-  line(io, total ? `${total} application(s)` : "pipeline is empty");
+  line(io, total ? `${total} application(s)` : onlyStale ? "no stale applications" : "pipeline is empty");
+  if (staleCount) {
+    line(
+      io,
+      `${staleCount} stale (untouched ${staleDays}+d in the backlog) — discard the dead ones, or move them: app move <id> matched|closed`
+    );
+  }
   return 0;
 }
 
@@ -815,6 +888,13 @@ function printHelp(io: Io, code = 0): number {
   "  app pursuit <appId> <green|amber|red> [--note n]",
   "                                  record the conversion-odds verdict (dashboard badge)",
       "  pipeline                        kanban view of all applications",
+      "  learn [--sample n] [--limit n]  advisory calibration from your own verdicts",
+      "                                  and outcomes (never changes anything by itself)",
+      "",
+      "candidate documents (workspace/profile/, gitignored):",
+      "  profile note list               named notes: resume standards, open-source list",
+      "  profile note get <name>         print one note",
+      "  profile note set <name> <file>  store a note from a markdown file",
       "",
       "outreach (message-playbook bookkeeping):",
       "  outreach log --target n --role r --channel c [--variant v] [--app id]",
@@ -878,6 +958,8 @@ const COMMANDS: Command[] = [
   { name: "app submitted", summary: "record submission time/portal/confirmation", run: cmdAppSubmitted },
   { name: "app match", summary: "score + attach report", run: cmdAppMatch },
   { name: "app pursuit", summary: "record conversion-odds verdict (green/amber/red)", run: cmdAppPursuit },
+  { name: "learn", summary: "advisory calibration report from your own verdicts/outcomes", run: cmdLearn },
+  { name: "profile note", summary: "candidate-owned documents (resume standards, open-source list)", run: cmdProfileNote },
   { name: "pipeline", summary: "kanban view", run: cmdPipeline },
   { name: "outreach log", summary: "record a sent/staged outreach message", run: cmdOutreachLog },
   { name: "outreach list", summary: "open threads / follow-ups due", run: cmdOutreachList },

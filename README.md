@@ -25,15 +25,22 @@ flows back through chat.
 - **Ask & remember.** The agent asks you about missing preferences (product vs
   service companies, salary floor, ...) and every form question it can't
   answer — then stores both in `workspace/profile/` so the next session
-  already knows. Nothing about you is hardcoded in the repo.
+  already knows. Nothing about you is hardcoded in the repo: even the rules for
+  your resume live in a `profile note` the repo only points at.
+- **Learns from your judgment, not from optimism.** `applymate learn` compares
+  the match score against the pursuit verdicts you actually recorded and the
+  outcomes you actually got — reporting where the score predicts your calls and
+  where it overlaps. It is advisory: it never moves your relevance floor, and it
+  says "not enough data" when that is the truth.
 - **Browser-ready.** With a harness that has browser/computer-use tools, Aja
   fills portals and clicks through Next buttons using your stored answers —
   and stops at the final Submit for your explicit yes. Always.
 - **Private by default.** Dossier, pipeline, and memory live under
   `workspace/` (gitignored); the UI binds to loopback; nothing is submitted or
-  sent anywhere without you.
+  sent anywhere without you. A test suite enforces it — the build fails if
+  workspace state, a home-directory path, or a real email is ever committed.
 - **Zero runtime dependencies.** TypeScript on Node ≥ 24 native type-stripping.
-  `npm test` (134 node:test tests), `npm run typecheck` (tsc strict).
+  `npm test` (219 node:test tests), `npm run typecheck` (tsc strict).
 
 ## Quick start
 
