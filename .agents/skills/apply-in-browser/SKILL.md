@@ -51,58 +51,15 @@ drive while you coach.
    --confirmation "<number if any>"` — this stamps the exact submission time
    and moves the application to `submitted`.
 
-## Portal quirks learned in the field
+## Portal mechanics — the recipe library
 
-- **Phenom portals (jobs.autodesk.com "pcsx" apply flow).** React app; hidden
-  `<input type=file>` is not framework-bound and a DataTransfer + change/drop
-  does nothing. The uploader is an antd Upload whose `beforeUpload` swallows
-  synthetic input silently. Working resume-upload path: read the PDF in Node,
-  base64 it, then in one `evaluate` call build a `File`, walk the input's React
-  fiber (`__reactInternalInstance$…`) up to the antd Upload fiber
-  (`memoizedProps.beforeUpload`), and call its `stateNode.post({ origin, parsedFile,
-  action, data })` directly — the XHR hits `/api/application/v2/resume_upload`
-  and the server parses + attaches the resume to the candidate session
-  (`profile` API shows `hasResume`/`resumeFilename`). Reload the page afterwards:
-  the UI chip appears and parsed contact fields autofill. **Reloading clears the
-  question answers** (contact refills; dropdowns don't) — re-answer after any
-  reload, and never reload between staging and Submit. Playwright locator clicks
-  time out on these portals (constant micro-renders): read rects via `evaluate`
-  and click via `cua` coordinates.
-- **LinkedIn messaging (threads + compose overlay).** To open a conversation
-  even when the inbox search/pager misbehaves, go to the profile and use its
-  Message link target directly:
-  `/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3A<urnId>&recipient=<urnId>&screenContext=NON_SELF_PROFILE_VIEW&interop=msgOverlay`
-  — it renders the full thread plus the compose box. Reading is easy: the ARIA
-  snapshot sees everything. Acting is not: Playwright locator clicks on the
-  messaging page time out (keep `domSnapshot` for ground truth, get node refs
-  from `dom_cua.get_visible_dom()` and click those). **Typing into the
-  compose box:** `cua.type`/`dom_cua.type` do NOT reach the contenteditable
-  editor. Working path (verified 2026-10-01): `playwright.evaluate` → focus
-  `div[role="textbox"][aria-label="Write a message…"]` →
-  `document.execCommand("insertText", false, text)`. The draft persists
-  server-side, so a failed send survives a reload of the compose URL.
-  **Sending:** `dom_cua` node clicks and Enter are ignored by the overlay's
-  React handler. Use the hover-travel + click recipe above: read the Send
-  button's center via `evaluate` (`button[type=submit]` in the message form),
-  `cua.move` through 3-4 converging points with ~250-300 ms pauses, hold
-  ~550 ms, then `cua.click`; verify the text moved from the compose box into
-  the thread.
-- **LinkedIn (profile invite dialogs, "Add a note to your invitation?").** The
-  dialog renders in closed shadow DOM: `evaluate` can't see it; the ARIA
-  snapshot and screenshots are the ground truth. Bare `cua.click` at button
-  coordinates is **silently ignored** — so are `dom_cua` node clicks and
-  Enter/Space on the focused button. What works (verified 3/3 on the referral
-  invites, 2026-09-28): navigate straight to
-  `https://www.linkedin.com/preload/custom-invite/?vanityName=<handle>` (the
-  dedicated invite page; the dialog auto-opens), **wait until the ARIA snapshot
-  confirms the dialog text before clicking** (it can render late), then
-  **hover-travel then click**: `cua.move` through 3-4 intermediate points
-  converging on the button with ~250-300 ms pauses, hold on target ~550 ms,
-  then `cua.click`. The note textarea opens auto-focused; `cua.type` lands the
-  note (char counter confirms), then hover-travel + click "Send" and verify the
-  profile shows "Pending, click to withdraw invitation sent to …". Same
-  hover-then-click pattern is worth trying on any portal that ignores bare
-  clicks. This is human pacing, not evasion — if a widget still refuses, stop
-  and hand it to the candidate.
+Hard-won portal mechanics (resume-upload workarounds, reload behavior,
+click fallbacks, LinkedIn messaging/invite recipes) live in the committed
+library `docs/portal-recipes/` — one file per site family, indexed in its
+README. **Read the file for this portal before opening the portal**, and
+after any difficulty you solve in here, write the recipe back into that
+library and commit it (`docs(recipes): <domain> — <what was learned>`).
+The AGENTS.md "Browser recipes" section is the standing rule: never
+re-derive what the library already knows, never fork a second copy.
 
 $ARGUMENTS

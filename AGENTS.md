@@ -210,7 +210,9 @@ that application until the candidate has seen the artifacts.
    Submit is the candidate's button, and `--submit` mode is only for forms the
    candidate has explicitly approved in this session).
    Portal form state rarely survives between sessions — on a return visit,
-   expect to refill. If the portal parses resumes (SmartRecruiters, Workday,
+   expect to refill. Read the portal's recipe in `docs/portal-recipes/`
+   before opening it (see **Browser recipes** below), and write back what
+   you learn. If the portal parses resumes (SmartRecruiters, Workday,
    Greenhouse do), upload the resume PDF first and let its parser autofill
    experience and education, then patch the gaps by hand; see the
    apply-in-browser skill for the file-upload mechanics.
@@ -314,6 +316,30 @@ candidate's side; you are the other side.
 - While doing long work, post progress updates to chat so the candidate can
   follow in the UI.
 
+## Browser recipes — read before you browse, write after you solve
+
+`docs/portal-recipes/` is the committed library of browsing recipes: the URL
+patterns, selectors, event sequences, and pacing that make difficult sites
+workable. It exists so no session ever has to re-figure a portal that another
+session already cracked.
+
+- **Before browsing any site** — job board, company career page, ATS portal,
+  LinkedIn, mail web UI, any page you are about to open — check
+  `docs/portal-recipes/README.md` and read the file for that domain. If a
+  recipe exists, follow it; only experiment where it is silent.
+- **The moment you solve a browsing difficulty** (a click that is ignored, an
+  upload that is swallowed, a widget that eats events, a flow that resets),
+  write the recipe **automatically, without being asked**: append it to the
+  domain file — goal, what fails naively, the working path (exact URLs,
+  selectors, event order, pacing), date verified — and **commit it to git**
+  (small commit, `docs(recipes): <domain> — <what was learned>`).
+- Recipes are site mechanics, never candidate facts: strip credentials,
+  cookies, answers, and anything personal before committing (directive 5),
+  and never record evasion techniques (forbidden outright above).
+- Same domain already has a file? Append and dedupe there — never fork a
+  second file for it. A recipe that stops working gets `BROKEN as of <date>`
+  and stays; the failure mode is information too.
+
 ## Status machine
 
 ```
@@ -332,7 +358,7 @@ AGENTS.md            this contract      (committed)
 bin/applymate.ts           the toolbelt CLI   (committed)
 src/                 TypeScript library (committed)
 test/                node:test suites   (committed)
-docs/                reference docs     (committed)
+docs/                reference docs, portal recipes (committed)
 browser-rig/         local laya form-filling rig (Python; guardrails, suites, tests)  (committed)
 workspace/           jobs, applications, chat log, profile memory  (NEVER committed)
 applymate.config.json      settings incl. dossierDir, minMatchScore      (NEVER committed)
