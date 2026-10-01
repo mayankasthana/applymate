@@ -16,6 +16,12 @@ browser-rig/jev-ultrafast/
 browser-rig/.venv/
 browser-rig/models/
 
+# Python bytecode. Compiled .pyc files bake the build machine's absolute paths
+# (e.g. /Users/<name>/...) into co_filename, so committing them leaks who built
+# them and where. Regenerated on every run; never belongs in the repo.
+__pycache__/
+*.py[cod]
+
 # Node
 node_modules/
 npm-debug.log*

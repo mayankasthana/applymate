@@ -19,12 +19,12 @@ from spec_server import load_specs, make_handler, value_for  # noqa: E402
 
 class ValueForTest(unittest.TestCase):
     def test_field_map_match_is_case_insensitive(self):
-        spec = {"field_map": [[r"first name", "Mayank"]]}
-        self.assertEqual(value_for(spec, {"field": {"label": "First Name"}}), "Mayank")
+        spec = {"field_map": [[r"first name", "Alex"]]}
+        self.assertEqual(value_for(spec, {"field": {"label": "First Name"}}), "Alex")
 
     def test_placeholder_labels_match_alternation(self):
-        spec = {"field_map": [[r"user email|example\.com", "a@b.co"]]}
-        self.assertEqual(value_for(spec, {"field": {"label": "name@example.com"}}), "a@b.co")
+        spec = {"field_map": [[r"user email|example\.com", "first.last@example.com"]]}
+        self.assertEqual(value_for(spec, {"field": {"label": "name@example.com"}}), "first.last@example.com")
 
     def test_quoted_goal_fallback_for_search_tasks(self):
         self.assertEqual(
@@ -39,7 +39,7 @@ class LoadSpecsTest(unittest.TestCase):
     def test_file_specs_merge_over_builtins_and_set_active(self):
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump({"active": "my-app",
-                       "specs": {"my-app": {"field_map": [["first name", "Mayank"]]}}}, f)
+                       "specs": {"my-app": {"field_map": [["first name", "Alex"]]}}}, f)
             path = f.name
         try:
             specs, active = load_specs(path)
@@ -103,7 +103,7 @@ class HttpEndpointsTest(unittest.TestCase):
             "messages": [{"role": "system", "content": "sys"},
                          {"role": "user", "content": json.dumps({"goal": "fill", "field": {"label": "First name"}})}]})
         self.assertEqual(status, 200)
-        self.assertEqual(json.loads(data["choices"][0]["message"]["content"]), {"text": "Mayank"})
+        self.assertEqual(json.loads(data["choices"][0]["message"]["content"]), {"text": "Alex"})
 
     def test_chat_completions_empty_value_for_unknown_field(self):
         self.request("POST", "/settask", {"name": "formy"})
