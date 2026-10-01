@@ -68,6 +68,25 @@ drive while you coach.
   reload, and never reload between staging and Submit. Playwright locator clicks
   time out on these portals (constant micro-renders): read rects via `evaluate`
   and click via `cua` coordinates.
+- **LinkedIn messaging (threads + compose overlay).** To open a conversation
+  even when the inbox search/pager misbehaves, go to the profile and use its
+  Message link target directly:
+  `/messaging/compose/?profileUrn=urn%3Ali%3Afsd_profile%3A<urnId>&recipient=<urnId>&screenContext=NON_SELF_PROFILE_VIEW&interop=msgOverlay`
+  — it renders the full thread plus the compose box. Reading is easy: the ARIA
+  snapshot sees everything. Acting is not: Playwright locator clicks on the
+  messaging page time out (keep `domSnapshot` for ground truth, get node refs
+  from `dom_cua.get_visible_dom()` and click those). **Typing into the
+  compose box:** `cua.type`/`dom_cua.type` do NOT reach the contenteditable
+  editor. Working path (verified 2026-10-01): `playwright.evaluate` → focus
+  `div[role="textbox"][aria-label="Write a message…"]` →
+  `document.execCommand("insertText", false, text)`. The draft persists
+  server-side, so a failed send survives a reload of the compose URL.
+  **Sending:** `dom_cua` node clicks and Enter are ignored by the overlay's
+  React handler. Use the hover-travel + click recipe above: read the Send
+  button's center via `evaluate` (`button[type=submit]` in the message form),
+  `cua.move` through 3-4 converging points with ~250-300 ms pauses, hold
+  ~550 ms, then `cua.click`; verify the text moved from the compose box into
+  the thread.
 - **LinkedIn (profile invite dialogs, "Add a note to your invitation?").** The
   dialog renders in closed shadow DOM: `evaluate` can't see it; the ARIA
   snapshot and screenshots are the ground truth. Bare `cua.click` at button
