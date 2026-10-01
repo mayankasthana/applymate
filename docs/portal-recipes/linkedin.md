@@ -76,6 +76,24 @@ The same hover-then-click pattern is worth trying on any portal that ignores
 bare clicks. This is human pacing, not evasion — if a widget still refuses,
 stop and hand it to the candidate.
 
+**"Add a note" button eats coordinate clicks — deep shadow-DOM fallback**
+(verified 2026-10-01, 3/3 sends): on the `preload/custom-invite` dialog, the
+"Add a note" button ignored hover-travel + `cua.click` twice in a row. The
+working fallback: `evaluate` a recursive walk that descends into every
+element's `shadowRoot` (the artdeco roots are open even when the recipe above
+calls the dialog "closed shadow DOM" for snapshot purposes), collect `button`
+/ `[role=button]` nodes, find the one whose `textContent` trims to the exact
+label ("Add a note", then "Send"), and dispatch its own `.click()`. Verify
+each step from the ARIA snapshot (textarea appears, counter fills, dialog
+closes), and on the profile afterwards the "Pending, click to withdraw
+invitation sent to …" marker is the ground truth.
+
+**Invite-note length cap is 300 even on Premium** (verified 2026-10-01): the
+dialog shows "You have unlimited notes with Premium", but that refers to note
+quantity — the editor counter still enforces `0/300`. Target ≤300 chars for
+every connection note regardless of plan, and read the live counter before
+typing rather than budgeting ~500.
+
 ## Job-card interactions (search results, saved lists)
 
 **Naive approach fails:** the card grid has **Dismiss** buttons flush
