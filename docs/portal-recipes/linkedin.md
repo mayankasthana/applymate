@@ -151,3 +151,46 @@ opened. Working order: deep-shadow click "Add a note" → in a fresh call confir
 textbox via `getByRole("textbox")` (count 1) and `click()` it → `cua.type` the note
 → confirm the live counter matches the intended length → dispatch the Send click.
 Verified 4/4 with the evaluator-dispatched Send on 2026-10-01.
+
+## Post search — informal "we're hiring" posts (verified 2026-10-01)
+
+**Goal:** surface reqs that exist only as a feed post (a recruiter or hiring
+manager describing a role), which never appear in `/jobs/search`.
+
+**Working path:**
+
+```
+https://www.linkedin.com/search/results/content/?keywords=<urlencoded>&sortBy=date_posted
+```
+
+This is the same search box the user types into, routed to the Posts tab and
+sorted by Latest. Same logged-in session; no query needed. Results are true
+feed posts (a `Feed post` heading in `main`), so the freshness labels are real
+("9m", "1h") — a post can be minutes old.
+
+**Naive approach fails:**
+
+- **Stacking `AND` kills the result set.** `"Staff Software Engineer" AND
+  (hiring OR "we are hiring") AND (Some City OR Some City) AND ("AI platform" OR
+  "data platform" OR agentic)` returned **zero** posts. LinkedIn does no
+  relevance recovery across many required terms — every extra `AND` narrows to
+  nothing. Use the two-term form only: `"<role title>" hiring`.
+- **Loose `OR` drifts off-profile entirely.** `hiring "Staff Engineer" OR
+  "Principal Engineer" Some City "AI platform"` returned a maritime-engineer
+  fleet post and a robotics role. Boolean precedence is not what a reader
+  expects. Quote the role title as one phrase and add at most one plain term.
+- **`.feed-shared-update-v2` does not match.** The hashed class names are not
+  exposed via `className`, so a card-level querySelector returns an empty list
+  even when posts are present. Read the **text layer** instead:
+  `document.querySelector('main').innerText.split('Feed post').slice(1)` gives one
+  block per post (poster name, headline, freshness, body), and
+  `main.querySelectorAll('a[href*="/in/"]')` gives the poster profiles.
+  `playwright.domSnapshot()` on the same page is a good cross-check.
+
+**Yield, honestly measured (4 queries, 2026-10-01):** ~3 posts per page, all
+inside the last hour, and **recruiting-agency blasts dominate** — three of four
+posts on the "Principal Software Engineer" page were the *same* DevOps req
+reposted by three CareerXperts / EV Search consultants. Do not read a page of 3
+posts as 3 opportunities; the genuinely-new product-company req is a minority.
+Filter every hit against the candidate's own prefs (role exclusions, location)
+before spending a card on it.
