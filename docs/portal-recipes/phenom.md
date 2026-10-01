@@ -103,7 +103,7 @@ page is closed. Presence in the list only means "was indexed at some point".
   go out on a machine-checked verdict from this domain.
 
 **Note on hydration (IAB, 2026-10-01):** the search page hydrates fine, but the
-**job detail page does not paint** — `<title>` is correct
+job detail page **in the long URL form** does not paint — `<title>` is correct
 (`MTS 2, AI Platform in Bengaluru, India | Engineering at eBay`), yet
 `document.body.innerText` stays ~22–362 chars (chatbot chrome only) after 8 s,
 with the JD and Apply button absent. So even the browser route may not resolve
@@ -112,3 +112,23 @@ it client-side; `dom_cua`/hover-travel clicking into the card does navigate
 hits for "Apply Now" only find unhydrated template literals
 (`aria-label="Apply Now for ${jobDetail.jobSeqNo}"`) in the app bundle — not a
 real button. Read this as a portal limitation, not as proof of death.
+
+**CORRECTION (2026-10-01, later): the detail page DOES paint — use the short URL
+form.** The failure above is a property of the **long**
+`…/job/EBAEBAUSR<seq>EXTERNALENUS/<slug>` form, not of eBay. The short
+`…/job/R<seq>/<Slug-Cased-Title>` form hydrates normally. Verified on
+`/us/en/job/R0076710/Unified-Data-Platform-Architect`: after ~4 s,
+`document.body.innerText` was the full 8.4 KB posting including "Minimum
+Qualifications", "Core Technology Areas" and a real **Apply Now** button. The
+same page's `fullPage`/`clip` screenshot calls both died with
+"browser screenshot surface preparation timed out after 3000ms", so on this
+domain prefer `evaluate`-ing `document.body.innerText` for the JD over trying to
+screenshot it; file the captured text as `job evidence … --kind jd-snapshot`.
+
+**The apply flow is the reliable liveness probe on both URL forms.** Navigating
+to `…/apply?jobSeqNo=<seq>&step=1&stepname=personalInformation` resolves and
+renders a header reading `You are applying for -<title> (<req>)`. For
+R0076802 this confirmed the req live after the detail page had refused to paint
+— the detail page failing to hydrate says nothing about whether the req is open,
+and the apply flow is the thing to trust.
+
