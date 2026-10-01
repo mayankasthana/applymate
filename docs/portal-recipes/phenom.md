@@ -72,3 +72,43 @@ Array.from(main.querySelectorAll("a[href*='/careers/job/']"))
 That turned "20 results for Principal Engineer" into the India-eligible subset
 (`Remote - India`) without ever touching the location facet. Click the
 `Search jobs` button by rect + `cua` when you do need a keyword filter.
+
+## Liveness checks are NOT valid server-side (jobs.ebayinc.com, 2026-10-01)
+
+**Goal:** decide whether a req is still open before applying or sending a
+referral (the standing `livenesscheck` / `outreachverification` rules).
+
+**Naive approach fails — this one produces confident wrong answers.** A plain
+`curl` of a job URL and a check for the delisted string
+(`This job listing is no longer available, but we have many more`) is useless
+here. That domain's SSR returns **that exact page for every job detail URL**,
+open or closed. Measured across four reqs in both URL formats
+(`/us/en/job/R0076802/Sr-MTS-AI-Platform` and the longer
+`EBAEBAUSR00…EXTERNALENUS/…` form): R0076802, R0076807, R0076436, R0076268 —
+**all four** returned a byte-identical ~1.4 KB visible-text page whose only
+sentence is the delisted notice, at the same offset (1246–1262). Two URLs that
+are certainly live render exactly like two that are certainly dead.
+
+The **search list is not a liveness signal either**: `/us/en/search-results`
+hydrates client-side (297 jobs, real cards) and happily lists reqs whose detail
+page is closed. Presence in the list only means "was indexed at some point".
+
+**Working path — a liveness check here needs a human, or an explicit opt-out:**
+
+- Don't let a server-side string match decide. Treat any automated eBay
+  liveness result as unproven, and say so rather than reporting a verdict.
+- Hand the candidate the req URL and ask them to open it and confirm an Apply
+  button is present; they are logged in and it is one click.
+- A referral that depends on a live req (`outreachverification`) should not
+  go out on a machine-checked verdict from this domain.
+
+**Note on hydration (IAB, 2026-10-01):** the search page hydrates fine, but the
+**job detail page does not paint** — `<title>` is correct
+(`MTS 2, AI Platform in Bengaluru, India | Engineering at eBay`), yet
+`document.body.innerText` stays ~22–362 chars (chatbot chrome only) after 8 s,
+with the JD and Apply button absent. So even the browser route may not resolve
+it client-side; `dom_cua`/hover-travel clicking into the card does navigate
+(the URL and title change) but the content still does not render. `evaluate`
+hits for "Apply Now" only find unhydrated template literals
+(`aria-label="Apply Now for ${jobDetail.jobSeqNo}"`) in the app bundle — not a
+real button. Read this as a portal limitation, not as proof of death.
