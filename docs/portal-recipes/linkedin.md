@@ -364,3 +364,36 @@ target to the recipient. Keep the company+role-named copy on disk; strip it at t
 The full working order is: type the text with the `execCommand` insert above → attach → read the size chip →
 hover-travel click Send → verify with all three send signals. Attachment and text send as ONE message; do not
 attach in a separate action expecting a second message.
+
+## Reading a thread body — `div.msg-thread__list li` is empty (verified 2026-10-02)
+
+**Goal:** read the messages of the thread that is open in the detail pane.
+
+**Naive approach fails:** the obvious selector returns nothing —
+`document.querySelectorAll('div.msg-thread__list li')` came back `[]` on a thread
+that was visibly rendered (the URL had already changed to `/messaging/thread/<id>/`).
+Do not conclude the thread is empty from that.
+
+**Working path:** the detail pane renders its messages as bare `- paragraph:` /
+`- 'heading …'` lines inside a plain `list`, with a
+`generic: <Name> sent the following message(s) at <time>` marker between them. Take a
+`domSnapshot()` and slice it — the thread body starts after the
+`Load more conversations` button and runs to `textbox "Write a message…"`. That slice
+carries the whole thread *including* the sender, degree, headline, and per-message
+timestamps, which is what you need to tell a recruiter pitch from a peer reply.
+
+The `h2` in the detail pane is **not** the conversation name — the first `h2` on the
+page is the toast region (`"0 notifications total"`), so `document.querySelector('h2')`
+returns the wrong thing. Match the name off the snapshot's
+`term: - heading "<Name>"` block instead.
+
+**Opening a thread clears its unread badge in the list.** The `1 unread message` node on
+a conversation card is gone after the thread is opened — so a badge count taken before
+opening is the only reliable one. Snapshot the Focused list first, then open.
+
+**The `Unread` chip read reuses the card dispatch.** The same
+mousedown/mouseup/click triple on the `button` whose `innerText` is exactly `Unread`,
+followed by the `div.msg-conversation-listitem__link` name/time/preview map, returns the
+completeness list — 9 stale threads (Aug 25 back to Mar 2023) against a 10-thread Focused
+list. This is the cheapest way to find inbound pitches nobody ever triaged, since the
+Focused list is paginated behind `Load more conversations` and hides them entirely.
