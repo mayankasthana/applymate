@@ -361,6 +361,30 @@ candidate-only name at the point of injection** (`new File([...], 'Candidate_Res
 attachment name is what the recruiter sees: a per-company filename that is correct in the dossier leaks the
 target to the recipient. Keep the company+role-named copy on disk; strip it at the boundary.
 
+**`input.files.length === 0` right after the dispatch is NOT proof of failure (verified 2026-10-02).** This is
+the inverse of the warning above and it cost a wasted second injection. LinkedIn's change handler **consumes
+and resets the input**: read it back immediately after assigning and you get
+
+```
+dt.files.length      -> 1
+input.files.length   -> 1     (assignment itself works)
+... after dispatchEvent(change) ...
+input.files.length   -> 0     (handler consumed it — attachment is fine)
+```
+
+So the only trustworthy read is the **`Attached` chip in the compose area**
+(`figure "Candidate_Resume.pdf • 277 KB Attached"`). Check the chip, never the input.
+
+**Re-running the injection silently attaches a SECOND copy** (observed: two identical chips). The chip count is
+the dedupe check before sending — if it is >1, click
+`button "Remove attachment <filename>"` (a plain locator click works on that button, unlike Send) until exactly
+one remains. Dedupe *before* sending; you cannot unsend a duplicate attachment.
+
+**Read the send button by its own name, not by `button[type=submit]` alone.** The composer has two submit-ish
+buttons and the send-options one sits beside it. Scope to the compose form
+(`document.querySelector('div[role="textbox"][aria-label="Write a message…"]')?.closest('form')`) and match
+`aria-label`/`innerText === 'Send'` with `b.type === 'submit'`, then dispatch its own `.click()`.
+
 The full working order is: type the text with the `execCommand` insert above → attach → read the size chip →
 hover-travel click Send → verify with all three send signals. Attachment and text send as ONE message; do not
 attach in a separate action expecting a second message.
