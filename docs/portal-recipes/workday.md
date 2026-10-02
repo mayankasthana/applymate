@@ -162,11 +162,28 @@ Chrome in-app browser (Playwright + dom_cua + cua surfaces).
   `paragraph` / `listitem` nodes, so a JD can be captured without scrolling or expanding
   anything. Remote type, location, time type, posted date and req id appear as
   `term` / `definition` pairs right under the title.
-- Cookie banner: a `Decline` button sits above the banner text in the snapshot. Dismiss it
-  **before** capturing a full-page screenshot — Workday's sticky header and the cookie bar
-  are `position: fixed`, so Chrome's stitched full-page capture repeats both down the whole
-  image, and a JD screenshot with four copies of the header is useless as evidence. The
-  non-dismissed capture also repeats the cookie text, which is noise in a committed artifact.
+- **Do NOT use `screenshot({fullPage: true})` for JD evidence on any of these portals.**
+  Chrome's stitched full-page capture on a tall SPA re-renders the *entire document* once per
+  tile, so a 4,800px posting comes out as the same header + hero + JD repeated four times
+  down one image. It is not a sticky-header artifact: the page has zero `position: fixed` or
+  `sticky` elements (verified via `getComputedStyle` over `document` and shadow roots). Same
+  failure seen on Twilio, UiPath, Adyen, Glean, Zeit.ai, Strac, TrueFoundry, Amgen, eBay,
+  Databricks, Wells Fargo and Walmart — it is a property of the capture, not the site.
+- Working path: set the viewport to `1280x1300`, `window.scrollTo(0, y)` in ~1,150px steps,
+  and take one viewport-sized screenshot per step. 3–4 frames cover a typical posting, are
+  continuous, and show the sticky header exactly once per frame — which is what a human
+  scrolling sees. Store each frame separately with `job evidence` and delete the bad
+  full-page file.
+- Cookie/consent banners must be dismissed before capturing. The control names differ by
+  tenant: Workday careers is `Decline`; UiPath is a `region "Cookie banner"` with a `Close`
+  button (not `Accept and continue`); eBay careers opens a **recruitment chatbot** that
+  covers the right column — close it via `getByRole("button", {name: "Close Chatbot Window"})`;
+  Amgen opens a fraud-warning banner whose close button has an **empty accessible name**, so
+  find it by iterating the unnamed buttons.
+- Check the capture before storing it. A repeated full-page capture is easy to miss if you
+  only look at the top; compare the image's height against the page's `scrollHeight` — a
+  capture much taller than expected, or with the same block at top and bottom, is the
+  artifact.
 - `similar jobs` links on this tenant carry doubled/duplicated query strings
   (`?source=LinkedIn?source=LinkedIn?source=LinkedIn`) and a duplicated locale path. Read the
   req id from the link text and the `/job/` path segment, not the query string.
