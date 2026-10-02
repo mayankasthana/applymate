@@ -148,6 +148,30 @@ Chrome in-app browser (Playwright + dom_cua + cua surfaces).
   control is the page-level Save and Continue.
 - Verified: 2026-10-01, once (JioStar, JR10079).
 
+## Public careers tenant `*.myworkdayjobs.com` is a different product (verified 2026-10-02, Maersk)
+
+- The entries above all cover `myworkdaysite.com/recruiting/wf/<Tenant>` (the apply/recruiting
+  app). A public careers board is a **different Workday product** with a different URL shape:
+  `<subdomain>.wd<N>.myworkdayjobs.com/<Tenant>_Careers/job/<Location>/<Slug>_<REQID>`.
+  Do not feed a `myworkdayjobs.com` posting URL into the `.../apply/autofillWithResume`
+  recipe above — the paths do not carry over.
+- `<Tenant>_Careers` (careers site) and `<Tenant>` (apply app) are separate tenants. A
+  posting URL must be read for which one it is before constructing any apply path.
+- The posting page renders fully in the ARIA snapshot from `domSnapshot()` on first load —
+  the whole JD (description, responsibilities, required skills, similar jobs) is present as
+  `paragraph` / `listitem` nodes, so a JD can be captured without scrolling or expanding
+  anything. Remote type, location, time type, posted date and req id appear as
+  `term` / `definition` pairs right under the title.
+- Cookie banner: a `Decline` button sits above the banner text in the snapshot. Dismiss it
+  **before** capturing a full-page screenshot — Workday's sticky header and the cookie bar
+  are `position: fixed`, so Chrome's stitched full-page capture repeats both down the whole
+  image, and a JD screenshot with four copies of the header is useless as evidence. The
+  non-dismissed capture also repeats the cookie text, which is noise in a committed artifact.
+- `similar jobs` links on this tenant carry doubled/duplicated query strings
+  (`?source=LinkedIn?source=LinkedIn?source=LinkedIn`) and a duplicated locale path. Read the
+  req id from the link text and the `/job/` path segment, not the query string.
+- Verified: 2026-10-02, once (Maersk, R198407, `maersk.wd3.myworkdayjobs.com`).
+
 ## Widgets that are not automatable in the in-app browser (verified 2026-10-01, JioStar tenant)
 
 - **Date of birth segments** — all three `dateSection{Month,Day,Year}-input` elements measure 0x0 px
