@@ -397,3 +397,50 @@ followed by the `div.msg-conversation-listitem__link` name/time/preview map, ret
 completeness list — 9 stale threads (Aug 25 back to Mar 2023) against a 10-thread Focused
 list. This is the cheapest way to find inbound pitches nobody ever triaged, since the
 Focused list is paginated behind `Load more conversations` and hides them entirely.
+
+## The "Yes, interested…" InMail quick reply is a TWO-STEP commit (verified 2026-10-02)
+
+**Naive approach fails — and this is the dangerous one:** the quick-reply button sits at the
+bottom of an inbound InMail thread with an accessible name that reads like it *is* the
+reply, so the obvious move is to click it and call it sent:
+
+```
+button "Reply to conversation with “Yes, interested...”"
+```
+
+A plain Playwright `click()` on that locator **succeeds with no error and sends nothing.**
+It opens an editable custom-reply composer instead. Nothing has left the machine at that
+point, but every surface still looks like the reply was sent — which is the failure mode
+the "verify a send" rule above exists to catch.
+
+**What the click actually produces** (all three appear together):
+
+```
+generic: Yes, interested...
+button "Cancel your custom reply and show the regular conversation message composer"
+generic: Edit reply…
+textbox "Edit reply…"          ← a TEXTAREA, pre-filled with LinkedIn's canned body
+button "Accept this inmail from the recruiter and reply with the custom message."
+  - generic: Send
+```
+
+**Working path — two clicks, verified between them:**
+
+1. `getByRole('button', { name: /^Reply to conversation with .Yes, interested/ })` —
+   check `count() === 1` first (the `“ ”` are curly quotes; a regex avoids escaping them).
+2. Click it, wait ~2.5s, then snapshot and assert `Edit reply` is now present. **If
+   `Edit reply` is absent the click did land as a send**; if present, you are in step 3.
+3. Read the draft before sending. It is a plain `TEXTAREA`, so `textContent` and
+   `innerText` both return `""` — read `el.value` through `locator.evaluate` instead. The
+   canned body for this reply is *"Hi <Name>, thank you for reaching out. I would like to
+   learn more about this opportunity."* Edit it if the candidate wants different words.
+4. `getByRole('button', { name: /Accept this inmail from the recruiter and reply with the custom message/ })`
+   — `count() === 1`. The accessible name says nothing about sending; the nested
+   `generic: Send` is the visible label. Click it.
+5. **Verify all of:** the thread shows `generic: Candidate Name sent the following
+   message(s) at <time>` with the body as a `paragraph`, a
+   `generic "Sent at <date>, <time>"` tooltip on that bubble, and *both* `Edit reply`
+   and the `Yes/No thanks` quick replies gone from the DOM.
+
+The `Cancel your custom reply…` button is the escape hatch if the draft is wrong before
+step 4 — cancelling is safe and sends nothing.
