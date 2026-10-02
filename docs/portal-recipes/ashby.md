@@ -52,3 +52,30 @@ and never fights the filter UI.
 
 **Verified:** 2026-10-01, Cyberhaven board (30 openings, Staff/Principal AI
 Security req located and screenshotted).
+
+## Reading a single posting
+
+**Goal:** pull the full JD from a posting URL of the form
+`jobs.ashbyhq.com/<Company>/<uuid>` and confirm it is still open.
+
+**Naive approach fails:** the UUID segment looks like a job ID you could validate,
+but it is opaque — a wrong-but-plausible UUID renders the board shell with an empty
+body, which reads as "the req is gone" rather than "you guessed wrong". There is no
+404 page to distinguish the two.
+
+**Working path:** the JD lives in the Overview tabpanel of the posting page, and the
+posting's own metadata sits in a heading/paragraph grid above the tabs — `Location`,
+`Employment Type`, `Location Type`, `Department`. Read the whole snapshot; it is the
+complete JD and there is no separate API to hit.
+
+**Liveness check:** the page ends with an `Apply for this Job` link
+(`/<Company>/<uuid>/application`) wrapping a button. If that link is present the req
+is open; if it is absent the posting has been pulled. Note that Ashby boards keep
+showing a heading count even when a specific req is dead, so the count is not a
+signal.
+
+**Do not click `Apply for this Job` to test liveness** — it leaves Overview for the
+application form. Read the link's presence from the snapshot instead.
+
+Verified: 2026-10-02, Trail board (Principal Software Development Engineer,
+Bengaluru, Hybrid, Engineering — Ashby-hosted, confirmed open).
