@@ -79,3 +79,40 @@ application form. Read the link's presence from the snapshot instead.
 
 Verified: 2026-10-02, Trail board (Principal Software Development Engineer,
 Bengaluru, Hybrid, Engineering — Ashby-hosted, confirmed open).
+
+## Filling the application form (verified 2026-10-02, Trail)
+
+**Resume upload:** the same React-fiber `onChange` path that works on Phenom
+also works here — the IAB has no file-chooser API, but driving
+`memoizedProps.onChange` on the `<input type="file" id="_systemfield_resume">`
+fiber with a synthetic `{ target: { files: [file] } }` event lands the file.
+**Verify via the visible filename chip, not `input.files`** — Ashby clears the
+input after React consumes it, so `files.length` reads 0 on a successful upload.
+
+**Text fields are React-controlled and resist select-all/Delete.** Clicking the
+field and pressing `ControlOrMeta+a` then `Delete` left the old value, and a
+retype appended rather than replaced (producing a doubled value). Use the
+native value setter so React registers the change:
+
+```js
+const el = document.querySelector(sel);
+const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+setter.call(el, val);
+el.dispatchEvent(new Event('input', { bubbles: true }));
+el.dispatchEvent(new Event('change', { bubbles: true }));
+```
+
+**UUID field ids that start with a digit are not valid CSS selectors** —
+`#48be7495-…` throws `is not a valid selector`. Use the attribute form:
+`input[id="48be7495-…"]`.
+
+**After the candidate submits, the form is replaced by a confirmation page**
+("Success — Your application was successfully submitted."), so every field
+reads empty and the submit button is gone. That empty read is the *success*
+signal, not a lost form — screenshot the confirmation immediately rather than
+re-checking fields. Ashby shows no confirmation number.
+
+**Voluntary EEO block:** the `__systemfield_eeoc_*` radio groups (gender,
+race, veteran status) are explicitly optional and marked `required=false`. Set
+only what's a known candidate fact (e.g. gender); leave the rest blank rather
+than selecting "Decline to self-identify" on the candidate's behalf.

@@ -23,6 +23,42 @@ the resume to the candidate session (the `profile` API shows
 `hasResume`/`resumeFilename`). Reload the page afterwards: the UI chip
 appears and parsed contact fields autofill.
 
+### Not every uploader is antd — check the fiber before walking for `beforeUpload`
+
+**Goal:** attach the resume on a Phenom form whose uploader is *not* antd
+(verified 2026-10-02, jobs.ebayinc.com R0076710).
+
+**Naive approach fails:** the antd walk above finds nothing — there is **no
+`beforeUpload` prop anywhere up the tree**, because the fiber parents are
+plain `<div>`s, a `cloudWidget` component, then the form. Blindly trying
+`beforeUpload` returns "no antd Upload fiber found" and looks like a dead
+end.
+
+**How to tell which uploader you have** — inspect the input's own fiber first:
+
+```js
+const input = document.querySelector('input[type="file"]');
+const fiber = input[Object.keys(input).find(k => k.startsWith('__reactInternalInstance$'))];
+// walk fiber.return upward, logging memoizedProps keys + stateNode ctor
+```
+
+**Working path when the handler is `onChange` on the input itself** (the
+eBay case — the handler lives on the file input's own fiber, depth 0): build
+the `File` and invoke `memoizedProps.onChange` with a synthetic event. The
+XHR fires, the server parses and attaches, and the parser autofills contact
+fields:
+
+```js
+fiber.memoizedProps.onChange({
+  target: { files: [file] }, currentTarget: { files: [file] },
+  preventDefault(){}, stopPropagation(){}, persist(){}
+});
+```
+
+Confirm server-side via the hidden `resumeName` / `resumeRelativePath` /
+`isResume=true` / `applySource=resumeupload` fields, and the visible filename
+chip — not by the file input, which still reads empty.
+
 ## Reload behavior
 
 **Naive approach fails:** reloading at the wrong moment wipes work.
@@ -131,4 +167,27 @@ renders a header reading `You are applying for -<title> (<req>)`. For
 R0076802 this confirmed the req live after the detail page had refused to paint
 — the detail page failing to hydrate says nothing about whether the req is open,
 and the apply flow is the thing to trust.
+
+**CORRECTION (2026-10-02): the apply flow IS a valid liveness probe — the
+"needs a human" verdict above was too strong.** Navigating R0076710 to the
+apply URL rendered the full form with the header "You are applying for -
+Unified Data Platform Architect (R0076710)", and the form accepted a resume
+upload that the server confirmed (`resumeRelativePath`, `applySource` set).
+So a req that renders a working apply form is open. The earlier conclusion
+("hand the candidate the URL and ask them to confirm") was drawn from a
+*different* failure (the detail page refusing to hydrate) and over-generalized.
+The accurate rule: **the apply form rendering and accepting an upload proves
+liveness in-browser**; only the server-side `curl`/string-match route is
+invalid.
+
+**But a rendering apply form does not mean the portal is healthy (2026-10-02).**
+On R0076710 the form rendered and took the upload, then `#next` refused to
+advance three ways (JS `b.click()`, CUA coordinate click, trusted locator
+click) while the DOM stayed valid (`form.checkValidity()` true, no error text,
+button enabled) — the candidate saw "An internal server error occurred."
+server-side. Same class of failure as 2026-10-01. **If Next won't advance on a
+form that reads valid, check for a backend 5xx before fighting the widget** —
+this is the portal being down, not the automation. Re-verify liveness on a
+later day and resume the staged application; the upload is server-side and a
+fresh session may already carry the resume.
 
