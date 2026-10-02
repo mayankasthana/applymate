@@ -26,7 +26,7 @@ employers share an ATS, so a `workday.md` recipe serves every Workday tenant:
 | [atlassian.md](atlassian.md) | atlassian.com careers — liveness-checking a req, bypassing the unusable function/country filters, remote confirmation | 2026-10-01 |
 | [eightfold-careers.md](eightfold-careers.md) | Eightfold `careers.<company>.com` boards — country-facet-then-search (the keyword box is semantic and the LOCATION box self-fills), hidden facet checkboxes, per-job liveness fields | 2026-10-02 |
 | [greenhouse.md](greenhouse.md) | greenhouse.io job boards — typeahead flyout fields, chip-selection verification, DataTransfer resume upload, submit/confirmation flow | 2026-10-01 |
-| [gmail.md](gmail.md) | mail.google.com — read-only IMAP via app password (no Google API client installed), confirming vs knock-out rejection classification | 2026-10-01 |
+| [gmail.md](gmail.md) | mail.google.com — read-only IMAP via app password, confirming vs knock-out rejection classification; composing and sending with attachments via DataTransfer injection + loopback byte server | 2026-10-02 |
 | [icims.md](icims.md) | icims.com — iframe traversal (`icims_content_iframe`), GDPR/hCaptcha handling, candidate profile updates, verification | 2026-10-01 |
 | [linkedin.md](linkedin.md) | linkedin.com — messaging, connection invites, job-card interactions, reading job descriptions, verification discipline | 2026-10-01 |
 | [mimecast.md](mimecast.md) | careers.mimecast.com — WebFetch 403 workaround, reading a posting's JD + posted date, Workday apply-URL shape | 2026-10-02 |
