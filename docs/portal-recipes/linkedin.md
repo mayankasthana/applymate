@@ -597,3 +597,98 @@ button "Accept this inmail from the recruiter and reply with the custom message.
 
 The `Cancel your custom reply…` button is the escape hatch if the draft is wrong before
 step 4 — cancelling is safe and sends nothing.
+
+---
+
+# Connection invites — the dialog that lies about its target, and how to type into it
+
+Verified 2026-10-03 across four referral invites.
+
+## The dialog can still be showing the PREVIOUS person
+
+**This is the one that can cause a real mistake.** Navigating directly to
+`/preload/custom-invite/?vanityName=<new-handle>` does not always reset the
+dialog. It rendered, for a *different* target:
+
+> Add a note to your invitation?
+> Personalize your invitation to **Pulkit Singhal** by adding a note.
+
+...when the URL said `vanityName=joylal4896`. Sending would have put a second
+invite to Pulkit and skipped Joy entirely.
+
+**Read the dialog's own text before typing.** The dialog renders the target's
+name in plain text, so one evaluate settles it:
+
+```js
+const t = (document.querySelector('div[role=dialog]')?.innerText) || '';
+const who = (t.match(/invitation to ([A-Za-z ]+?) by/) || [])[1];
+```
+
+If `who` is not the person you mean, back out and reach the dialog from that
+person's **profile** (`a[href="/preload/custom-invite/?vanityName=..."]`) rather
+than by navigating to the URL. Same fix that worked: the dialog state resets
+when it is opened from a profile page rather than a bare URL.
+
+## `cua.type` silently no-ops here; `fill()` works
+
+The note textarea is a **zero-size hidden proxy** — `getBoundingClientRect()`
+returns `0,0`, and `element.focus()` does not stick, so `cua.type` goes
+nowhere with no error. Two of four invites were lost this way before the cause
+was clear.
+
+The locator's `fill({ force: true })` lands the text correctly:
+
+```js
+const ta = tab.playwright.locator('div[role=dialog] textarea');
+await ta.fill(note, { force: true });
+// verify: ta.evaluate(el => el.value.length) and the n/300 counter
+```
+
+Always read the length back. An empty textarea looks identical to a working one.
+
+## The "Add a note" click needs a second attempt
+
+The dialog opens on the `Add a note?` prompt. The first `cua.click` on that
+button is often swallowed while the dialog animates in; the second lands. The
+tell is `document.querySelector('textarea')` — check it immediately after each
+click rather than assuming.
+
+## The invite note is capped at 300 chars even on Premium
+
+The dialog says *"You have unlimited notes with Premium"*, which reads like the
+length is unlimited too. It is not — the note editor still shows
+`Please limit personal note to 300 characters` with a live `n/300` counter, and
+enforces it. Unlimited refers to note *count*. Read the live counter; do not
+size to the plan.
+
+## Verifying a send
+
+Dialog gone is not proof. Read the profile toolbar afterwards and look for
+`Pending`:
+
+```js
+const t = document.body.innerText.replace(/\s+/g,' ');
+const i = t.indexOf('Joy Lal Chattaraj Senior');
+t.slice(i, i + 130);   // -> "... Senior Software Engineer at Databricks Pending Message"
+```
+
+## People-search URLs are not stable evidence
+
+Two traps when harvesting profile handles from a people search:
+
+- **Do not infer a handle.** `deeksha-sood-4b306813` and
+  `pulkit-singhal-74a3b4519` were guessed suffixes and were both wrong; the
+  real ones were `deeksha-sood-a9b50426` and plain `pulkit-singhal`. Read the
+  href off the result card.
+- **A reload can change the result set entirely.** The same URL returned one set
+  of people, then after `reload()` returned a different slice (2 cards instead
+  of 10). Re-read and re-capture handles immediately before using them; don't
+  reuse handles captured earlier in the session.
+
+## Presence text is not a message
+
+A conversation-list row showing `Status is reachable` / `Status is online`
+next to a name is the **presence indicator**, not new mail. It renders right
+under the contact name and can read like a truncated reply
+(`Status is re...`). Check the row's actual message preview — a preview
+beginning `You:` means nothing is owed.
