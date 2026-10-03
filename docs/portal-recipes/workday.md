@@ -148,6 +148,37 @@ Chrome in-app browser (Playwright + dom_cua + cua surfaces).
   control is the page-level Save and Continue.
 - Verified: 2026-10-01, once (JioStar, JR10079).
 
+## Reading the JD as JSON, without a browser (verified 2026-10-02)
+
+Most `myworkdayjobs.com` / `myworkdaysite.com` postings serve the full JD as
+JSON from a `wday/cxs` endpoint. Use this to read a JD in bulk — it removed the
+need for a browser on 20 of 21 postings in one batch, and the browser hung or
+returned an empty `document.body` on every one of them.
+
+- **Naive approach fails (two ways, both silent):**
+  1. Building the cxs URL from the tenant *page* segment. `solera…/Global_Career_Site/job/…`
+     is tenant **`solera`**, site `Global_Career_Site` — not `Global`, not `Global_Career_Site`.
+     Taking `site.split("_")[0]` yields `Global` and the request 406s.
+  2. Dropping the `/job/` segment. The posting URL is `…/<site>/job/<path>` but
+     cxs is `…/wday/cxs/<tenant>/<site>/job/<path>` — the `/job/` stays.
+- **Working path:**
+  ```
+  https://<host>/wday/cxs/<tenant>/<site>/job/<path>
+  ```
+  `Accept: application/json`, returns `{"jobPostingInfo": {"title", "jobDescription", "jobLocationInfo"}}`.
+- **Getting the tenant, which differs by URL shape:**
+  - careers board `<host>/en-US/<Site>/job/<path>` → tenant is the **hostname's first label**
+    (`solera.wd5.…` → `solera`; `ffive.wd5.…` → **`ffive`**, not `f5`)
+  - recruiting app `<host>/en-US/recruiting/<Tenant>/<Site>/job/<path>` → tenant is the
+    **`recruiting/` path segment** (`microchiphr`, not `microchip`)
+  - Wrong tenant → `HTTP_422`. A WAF → `HTTP_406`. A 406 is **not** proof of bot
+    protection: check the tenant before concluding the tenant blocks you.
+- **A blank `document.body.innerText` in the browser does not mean the posting is dead.**
+  The careers app hydrates late and the recruiting app sometimes never renders;
+  it said "dead" on Microchip while cxs returned a full JD. Go to cxs first.
+- Verified: 2026-10-02, 20 postings across the Magnitude, F5, Genesys, Epicor,
+  Solera, Arctic Wolf, Microchip, CBA, Zebra and TransUnion tenants.
+
 ## Public careers tenant `*.myworkdayjobs.com` is a different product (verified 2026-10-02, Maersk)
 
 - The entries above all cover `myworkdaysite.com/recruiting/wf/<Tenant>` (the apply/recruiting
@@ -200,3 +231,53 @@ Chrome in-app browser (Playwright + dom_cua + cua surfaces).
 - Symptom of both: the field looks present in the ARIA snapshot but cannot be driven.
 - Note the phone field re-displays with a leading 0 after reload on the India profile; that is the
   tenant's own mask, not corrupt data — do not "fix" it.
+
+## Bulk job search on any tenant — the `jobs` POST endpoint (verified 2026-10-03, Eli Lilly `lilly.wd115`)
+
+**Goal:** enumerate every posting for a country/keyword without paging a UI, and read
+each JD without a browser. A 687-posting India sweep + 10 JD fetches ran in one
+script with no browser at all.
+
+**Naive approach fails:** the public careers board here is a **Phenom** front end
+(`careers.lilly.com`) sitting in front of a separate Workday tenant
+(`lilly.wd115.myworkdayjobs.com`), and the two do not agree. `careers.lilly.com`
+sits behind a Cloudflare managed challenge (`curl` → `403`, `cf-mitigated:
+challenge`), and its `?location=India` query param returns "No search results
+found" even though Workday lists 198 India postings. **The Phenom board's filters
+are not the source of truth — the Workday tenant is.**
+
+**Working path — search:**
+
+```
+POST https://<host>/wday/cxs/<tenant>/<Site>/jobs
+Content-Type: application/json   Accept: application/json
+{"appliedFacets":{},"limit":20,"offset":0,"searchText":"India"}
+```
+
+Returns `{total, jobPostings:[{title, locationsText, externalPath}]}`. Page with
+`offset += limit` until `jobPostings` is empty; `limit` above 20 works.
+Then read a JD with the usual cxs shape — the `/job/` segment stays:
+
+```
+GET https://<host>/wday/cxs/<tenant>/<Site><externalPath>
+```
+
+- **The tenant is neither the hostname's first label nor the site segment here.**
+  Host `lilly.wd115.myworkdayjobs.com`, site `LLY`: tenant `lilly` → **200**,
+  tenant `LLY` → **422**, and `.../cxs/LLY` alone → **406**. The
+  hostname-first-label rule from the entries above does hold here; the site segment
+  (`LLY`) is not the tenant.
+- Read a JD as text by stripping tags off `jobPostingInfo.jobDescription` — it is
+  HTML with `<p style=...>` wrappers and `&#39;` / `&#43;` / `&#64;` entities.
+  `jobLocationInfo` is `null` on this tenant; `locationsText` on the search
+  result carries the location instead.
+- Verified: 2026-10-03, `lilly.wd115.myworkdayjobs.com`, tenant `lilly`, site
+  `LLY` — 687 India postings swept, 20 JDs fetched.
+
+**Screenshots time out on this tenant** — `tab.screenshot()` fails with
+`browser screenshot surface preparation timed out after 3000ms` (same failure mode
+as the eBay Phenom note above). The posting page itself hydrates fine in-browser
+(~9–16 KB of `document.body.innerText`, live `Apply` button, and an
+`End Date: … (N days left to apply)` line), so **read liveness and the deadline
+from the rendered text and file `job evidence … --kind jd-snapshot` with the text**,
+rather than burning time on a capture that will not land.

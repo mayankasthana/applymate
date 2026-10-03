@@ -31,7 +31,8 @@ employers share an ATS, so a `workday.md` recipe serves every Workday tenant:
 | [linkedin.md](linkedin.md) | linkedin.com — messaging, connection invites, job-card interactions, reading job descriptions, verification discipline | 2026-10-01 |
 | [mimecast.md](mimecast.md) | careers.mimecast.com — WebFetch 403 workaround, reading a posting's JD + posted date, Workday apply-URL shape | 2026-10-02 |
 | [phenom.md](phenom.md) | Phenom "pcsx" apply portals and public job boards (jobs.autodesk.com, jobs.twilio.com et al.) — resume upload, reload behavior, click fallbacks, search/facet UI | 2026-10-01 |
-| [workday.md](workday.md) | Workday recruiting (myworkdaysite.com) — apply-flow URLs, shadow-DOM form filling, account-creation recovery, duplicate-application detection | 2026-10-01 |
+| [smartrecruiters.md](smartrecruiters.md) | api.smartrecruiters.com — reading a posting's JD without a browser, board search to liveness-check an aggregator link, the `jobAd.sections` dict shape | 2026-10-02 |
+| [workday.md](workday.md) | Workday recruiting (myworkdaysite.com) and public careers boards (myworkdayjobs.com) — apply-flow URLs, shadow-DOM form filling, account-creation recovery, duplicate-application detection, the `wday/cxs` JSON endpoint for reading a JD with no browser, and the `jobs` POST endpoint for bulk-sweeping a country | 2026-10-03 |
 
 ## Recipe format
 
