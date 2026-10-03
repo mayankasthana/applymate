@@ -184,8 +184,13 @@ returned an empty `document.body` on every one of them.
 - The entries above all cover `myworkdaysite.com/recruiting/wf/<Tenant>` (the apply/recruiting
   app). A public careers board is a **different Workday product** with a different URL shape:
   `<subdomain>.wd<N>.myworkdayjobs.com/<Tenant>_Careers/job/<Location>/<Slug>_<REQID>`.
-  Do not feed a `myworkdayjobs.com` posting URL into the `.../apply/autofillWithResume`
-  recipe above — the paths do not carry over.
+- **CORRECTION (2026-10-03, Eli Lilly):** the earlier note here said not to feed a
+  `myworkdayjobs.com` posting URL into the `.../apply/autofillWithResume` recipe because
+  "the paths do not carry over". **They do carry over** on this product — the Maersk case
+  failed for a different reason (its site segment is `Maersk_Careers`, not `Maersk`).
+  On `lilly.wd115.myworkdayjobs.com` the full chain below worked first time:
+  `…/en-US/LLY/job/<Location>/<Slug>_<REQID>` → `…/apply` → `…/apply/autofillWithResume`.
+  The real variable is the **site segment**, which this tenant spells `LLY`.
 - `<Tenant>_Careers` (careers site) and `<Tenant>` (apply app) are separate tenants. A
   posting URL must be read for which one it is before constructing any apply path.
 - The posting page renders fully in the ARIA snapshot from `domSnapshot()` on first load —
@@ -274,10 +279,139 @@ GET https://<host>/wday/cxs/<tenant>/<Site><externalPath>
 - Verified: 2026-10-03, `lilly.wd115.myworkdayjobs.com`, tenant `lilly`, site
   `LLY` — 687 India postings swept, 20 JDs fetched.
 
-**Screenshots time out on this tenant** — `tab.screenshot()` fails with
-`browser screenshot surface preparation timed out after 3000ms` (same failure mode
-as the eBay Phenom note above). The posting page itself hydrates fine in-browser
-(~9–16 KB of `document.body.innerText`, live `Apply` button, and an
-`End Date: … (N days left to apply)` line), so **read liveness and the deadline
-from the rendered text and file `job evidence … --kind jd-snapshot` with the text**,
-rather than burning time on a capture that will not land.
+**Screenshots time out on the JOB POSTING page of this tenant** — `tab.screenshot()` fails
+with `browser screenshot surface preparation timed out after 3000ms` (same failure mode as
+the eBay Phenom note above). The posting page itself hydrates fine in-browser (~9–16 KB of
+`document.body.innerText`, live `Apply` button, and an `End Date: … (N days left to apply)`
+line), so **read liveness and the deadline from the rendered text and file
+`job evidence … --kind jd-snapshot` with the text**, rather than burning time on a capture
+that will not land.
+
+- **CORRECTION (2026-10-03, Eli Lilly apply flow):** this is a **page-specific** failure,
+  not a tenant-wide one. Screenshots worked normally on `/apply/autofillWithResume`, on the
+  Review step, and on the post-submit confirmation page — three captures in one session,
+  including the submit proof. Do not carry "screenshots are dead on Lilly" forward; scope
+  the workaround to the JD posting page only.
+
+---
+
+## A full apply flow on a `myworkdayjobs.com` tenant (verified 2026-10-03, Eli Lilly `lilly.wd115`)
+
+End-to-end run: R-112121, Bengaluru, account creation through submission. The
+`.../apply` options page offers **Autofill with Resume / Apply Manually / Use My Last
+Application**. `includeResumeParsing: true` on this req, so the resume upload autofills.
+
+**Step 1 of 8 is Create Account/Sign In, and the stepper drops to 7 of 7 once it clears.**
+That step disappearing is the proof the account took. No duplicate-application warning
+appeared, so no prior application existed under that email. Accounts are per-tenant —
+ones from other Workday employers (JioStar, Thomson Reuters, Maersk) do **not** carry over.
+
+### Read the field before filling it — the labels are not where you expect
+
+`data-automation-id` is useless on these inputs. Walk shadow roots and read `id`/`name`
+instead; they carry a stable index and a readable suffix:
+
+```
+input#address--addressLine1        input#name--legalName--firstName
+input#workExperience-65--companyName input#workExperience-65--roleDescription
+input#education-1074--schoolName    button#education-1074--degree
+input#phoneNumber--phoneNumber      input[name="candidateIsPreviousWorker"][value="false"]
+```
+
+Question dropdowns are `<button id="primaryQuestionnaire--<hash>">` on page 1 and
+`secondaryQuestionnaire--<hash>` on page 2 — **the prefix changes between pages**, so a
+selector written for one page silently matches nothing on the other. Prefer
+`getByRole("button", { name: /Degree Select One/i })` over enumerating ids.
+
+### `fill()` alone does not commit — and a never-focused field needs `click()` first
+
+Confirms and extends the JioStar note above. `locator.type()` alone left four Company
+fields unregistered (DOM value correct, save failed with "The field Company is required").
+`click()` **before** typing fixed it. The sequence that reliably commits:
+
+```js
+await loc.click();          // required on a field that has never been focused
+await loc.fill("");
+await loc.type(value, { delay: 20 });
+await loc.press("Tab");     // blur so change/blur handlers run
+```
+
+### Masked date spinbuttons: `.click()` times out, `focus()` works
+
+`input[id$="-dateSectionYear-input"]` sits under an overlay
+(`div[id$="-dateSectionYear-display"]`) that intercepts the click, so Playwright reports
+"covered by …" and times out. Do not retry the locator — focus it directly:
+
+```js
+await loc.evaluate((el) => el.focus());
+await loc.fill(""); await loc.type("2010", { delay: 25 }); await loc.press("Tab");
+```
+
+### Illegal characters rejected at save
+
+Role Description rejects `< > [ ] " { } \` with *"Contains illegal characters"*. The
+resume parser copies straight quotes straight through (e.g. a project name in double
+quotes, a metric value in double quotes), so **swap `"` → `'` in every parsed description
+before saving**, or the step will not advance. A scrub of `/[<>[\]{}"\\]/` across all
+textareas catches it.
+
+### A field can save clean and still be empty — verify on Review
+
+The single most important habit here. A free-text answer read back correctly in the DOM,
+`Save and Continue` returned with **no error block**, and the Review page rendered
+**"No Response"**. It is only caught by re-reading Review. (Re-entering with
+`click → fill("") → type → Tab` did commit it — but the first attempt used
+`click → fill("") → type` with no `Tab` and silently failed.)
+
+**So: after the last step, read the Review page and assert every required answer you set,
+not the DOM.**
+
+### The second row of a repeatable block vanishes unless the first is re-committed
+
+Cost three attempts and one near-data-loss on Education entries. `Add Another` renders the
+new row client-side; if the **first** row is not touched again afterwards, the save
+serialises only one of them and the other disappears — sometimes taking its years with it.
+Working order:
+
+1. `Add Another` → fill the **second** row completely.
+2. Go back and **re-type the first row's fields and re-select its degree**.
+3. Only then Save.
+
+Verified: 2 of 2 entries present on Review with both date ranges intact. Note this matters
+most for integrated/dual programmes (one institution, two degrees) — check whether the
+tenant holds repeat education rows at all before assuming one row is enough.
+
+### Typeahead chips (`Field of Study`) never commit on this tenant
+
+Typing a term and pressing Enter *does* select — the widget flips from `0 items selected`
+to `Minimized`. But the chip never reaches the framework model:
+
+- `Tab` to blur **discards** it, straight back to `0 items selected`;
+- saving while it reads `Minimized` writes **"No Response"** to Review;
+- the option list never enters the DOM, so there is no element to click to commit it.
+
+Do not spend attempts here. The field is optional on Education (no asterisk); the degrees,
+school and dates are what a screener reads. If it ever matters, a human must pick from the
+dropdown by hand.
+
+### Phone number wants local digits only
+
+`Country / Region Phone Code` is a separate selected chip (e.g. `India (+91)`). The number
+field rejects a value carrying its own country prefix — the parser's
+`+91-9XXXXXXXXX` fails with *"Enter a valid format for Phone Number"* — it wants the
+local subscriber digits only.
+
+### Deleting a parser-invented row
+
+Every `Delete` in a repeatable block is named exactly `Delete`, so `getByRole` is ambiguous.
+Scope to the row: find the row's `jobTitle` input, climb ancestors until you hit one with
+exactly one `Delete` button, and `evaluate(el => el.click())` it. Verify the row count
+dropped before doing anything else. (Here the parser had invented an entry with a garbled
+title, no company, no dates, and the entire resume summary as its description.)
+
+### Post-submit proof
+
+This tenant issues **no confirmation number**. The proof is Candidate Home → My Applications
+→ the row (`Job Req` + `My Application Status: Application Received` + `Date Submitted`),
+plus the "Application Submitted" modal. The modal covers the table — dismiss it and scroll
+to the row to capture both. Assert `Active (1)` rather than trusting the modal.
