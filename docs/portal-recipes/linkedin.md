@@ -205,6 +205,94 @@ logged-in `/jobs/view/<id>/` page only for the header screenshot
 (`--kind jd-screenshot`, it shows the Easy Apply button and applicant
 count). Verified 2026-10-01 on job 4474128132 (Hiver).
 
+## Sweeping new postings — the classic search UI is retired (verified 2026-10-03)
+
+**Goal:** find everything posted in the last week matching a role + location,
+from a logged-in IAB session.
+
+**Naive approach fails — the whole page is dead, three separate ways** (IAB,
+logged-in session, `https://www.linkedin.com/jobs/search`):
+
+- **`domSnapshot()` times out** every time (>32 s). The page is too heavy for
+  the ARIA snapshot; there is no snapshot-based locator ground truth to work
+  from. Read the text layer via `evaluate` instead.
+- **There are no keyword or location inputs at all.** A full shadow-DOM walk
+  returns `input[type=text]` count **0** — not hidden, absent. The page
+  renders the results list and the `Show filters` button and nothing else.
+- **`Show filters` ignores every click technique**: locator `click()` times
+  out on actionability, and `cua.move` + hover-travel + `cua.click` at the
+  measured button centre (133, 80) leaves the panel closed with no error.
+  The page banner explains why: *"We're gradually retiring classic job
+  search starting in September."*
+
+The default landing view is also useless as a source: "Jobs in India,
+264,445 results", and **7 of the first 8 cards are `Promoted`** postings.
+Reading that page as "what's new on LinkedIn" produces agency and paywalled
+ads, not reqs.
+
+**Working path — the guest search endpoint, same family as the JD endpoint
+above.** It is LinkedIn's own search backend, needs no login, and returns
+10 cards per request:
+
+```
+https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search
+  ?keywords=<urlencoded role terms>
+  &location=<urlencoded location>
+  &f_TPR=r604800        # past week (r259200 = 3d, r86400 = 24h)
+  &start=0              # 0, 25, 50 … paging
+```
+
+Fetch it from the page context so it runs same-origin with the session:
+
+```js
+const r = await fetch(url, { headers: { 'Accept': 'text/html' } });
+const html = await r.text();
+```
+
+**Parse with regex, not `DOMParser`** — verified: `new DOMParser()
+.parseFromString(fragment, 'text/html').querySelectorAll('li')` returns **0**
+on this response (a 30 KB body with no list items), because the fragment is a
+bare `<li>` run with no document context. Splitting the raw string works:
+
+```js
+html.split('<li>').slice(1).map(li => ({
+  title:    strip(li.match(/base-search-card__title[^>]*>([\s\S]*?)</)?.[1]),
+  company:  strip(li.match(/base-search-card__subtitle[\s\S]{0,300}?>([\s\S]*?)<\/h4>/)?.[1]),
+  location: strip(li.match(/job-search-card__location[^>]*>([\s\S]*?)</)?.[1]),
+  when:     strip(li.match(/job-search-card__listdate[^>]*>([\s\S]*?)</)?.[1]),
+  id:       li.match(/href="([^"]*\/jobs\/view\/[^"]*)"/)?.[1]?.match(/-(\d{9,11})\?/)?.[1]
+}))
+```
+
+The `company` capture needs a bounded `[\s\S]{0,300}?` — the subtitle anchor
+can carry attributes long enough to blow an unbounded lazy match. The job id
+is the trailing digit run before `?` in the card href.
+
+**Two constraints that cost real time:**
+
+- **One `evaluate` cell ≈ one or two requests.** `playwright.evaluate` is
+  capped at 3000 ms, so a loop of 8 fetches with 900 ms pacing between them
+  returns `{jobs: []}` — a *silent empty result*, not a timeout error. That
+  reads exactly like "no new jobs today". Batch 2 requests per cell.
+- **The guest endpoint working is NOT the company's liveness check.** A 200
+  here only means LinkedIn still lists the posting. Several boards disagree
+  with the aggregator's location: the Coupang req listed on LinkedIn as
+  `Bengaluru, Karnataka, India` appears on `coupang.jobs` only as
+  **Singapore** ("Staff Backend Engineer", Bengaluru is a listed location but
+  a different req). Run the `prefs livenesscheck` pass on the company board
+  before staging anything.
+
+**Company boards that need the browser, not curl:** `coupang.jobs` returns
+403 to plain HTTP, and `careers.equinix.com/job-search` 404s. Ashby's public
+API 404s on guessed board slugs (`rippling`, `toast` are both wrong) — find
+the slug from the careers page rather than composing it.
+
+**Yield:** ~60 unique cards across 6 keyword/location pairs, of which 14
+survived the candidate's prefs filter (product company, Staff+, no DevOps,
+no ML/DS-titled, not already on the board). Treat LinkedIn as a *discovery*
+surface only — every req still needs its JD pulled from the guest posting
+endpoint and liveness-checked on the company board.
+
 ## Verification discipline (learned from silent failures)
 
 LinkedIn sometimes drops an action silently — an invite that shows no error
