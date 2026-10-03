@@ -32,7 +32,7 @@ employers share an ATS, so a `workday.md` recipe serves every Workday tenant:
 | [mimecast.md](mimecast.md) | careers.mimecast.com — WebFetch 403 workaround, reading a posting's JD + posted date, Workday apply-URL shape | 2026-10-02 |
 | [phenom.md](phenom.md) | Phenom "pcsx" apply portals and public job boards (jobs.autodesk.com, jobs.twilio.com et al.) — resume upload, reload behavior, click fallbacks, search/facet UI | 2026-10-01 |
 | [smartrecruiters.md](smartrecruiters.md) | api.smartrecruiters.com — reading a posting's JD without a browser, board search to liveness-check an aggregator link, the `jobAd.sections` dict shape | 2026-10-02 |
-| [stripe.md](stripe.md) | stripe.com/careers — reading a posting + liveness (apply link), sidebar Office location field, the EU-applicant-notice tell, the 100%-in-office boilerlist trap, and searching by function to find a location-clean sibling req | 2026-10-03 |
+| [stripe.md](stripe.md) | stripe.com/careers — reading a posting + liveness (apply link), sidebar Office location field, the EU-applicant-notice tell, the 100%-in-office boilerlist trap, searching by function to find a location-clean sibling req, and the Greenhouse apply embed (iframe won't attach — open the src directly; react-aria zero-size search inputs) | 2026-10-03 |
 | [workday.md](workday.md) | Workday recruiting (myworkdaysite.com) and public careers boards (myworkdayjobs.com) — apply-flow URLs, shadow-DOM form filling, account-creation recovery, duplicate-application detection, the `wday/cxs` JSON endpoint for reading a JD with no browser, and the `jobs` POST endpoint for bulk-sweeping a country | 2026-10-03 |
 
 ## Recipe format

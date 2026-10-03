@@ -85,3 +85,65 @@ mid score on an eligible one.
 **Verified:** 2026-10-03 — 5 listing reads (Dublin Datalake, Bengaluru Core
 Infra, 2 search pages, Bengaluru Data Pipeline), all live with apply buttons
 present. In-app browser only; `WebFetch` unusable on this domain.
+
+## The apply form is a GREENHOUSE embed, and the iframe cannot be attached
+
+- **Goal:** reach and drive the application form.
+- **Naive approach fails:** the apply page at
+  `stripe.com/careers/apply/<slug>/<id>` renders the form inside an `<iframe>`
+  whose `src` is
+  `https://job-boards.greenhouse.io/embed/job_app?for=stripe&token=<reqId>`.
+  `frameLocator(...)` on it fails with
+  `unable to attach frame target <id>` — the cross-origin embed never attaches.
+- **Working path:** read the iframe `src` with one `evaluate` over
+  `document.querySelectorAll("iframe")`, then **open that URL directly in its
+  own tab** and drive it there. Everything below is that direct tab.
+  Re-find it each session with
+  `browser.tabs.list().find(t => t.url.includes("greenhouse.io/embed"))`.
+  The Greenhouse mechanics (typeahead, chip verification, DataTransfer upload,
+  `Submit application`) are already in [greenhouse.md](greenhouse.md) and apply
+  unchanged — this is only the entry point.
+
+### Stripe-specific field shapes (2026-10-03, req 8209970)
+
+Every dropdown on this form is a **react-aria combobox with a zero-size proxy
+search input**. Consequences:
+
+- `locator.type()` on `#iti-0__search-input` times out (the element is 0×0).
+  Drive them with `cua.click` at the control's measured centre, then
+  `cua.type({text})`, then click the option by its measured centre.
+- **`scrollIntoView` and the click must be separate `js` cells.** Calling
+  `scrollIntoView` and then measuring in the same `evaluate` returns
+  coordinates that are stale by the time the click lands — the click silently
+  hits nothing. Pattern: *scroll → wait → measure → click → wait → measure
+  option → click*.
+- Options land as a **chip**, not an input value. `.value` on the underlying
+  input stays `""` for School, Degree, City and every Yes/No — that is not a
+  failure. Verify by screenshot or by the chip's `×` sibling, exactly as
+  greenhouse.md says. `input.files` likewise reads empty after a successful
+  DataTransfer upload.
+- The Yes/No questions are **not** bare `Yes`/`No`. The remote-work one reads
+  `"Yes, I intend to work remotely."` / `"No, I intend to work from an office
+  location."` — match on the full string.
+- Location (City) and the phone Country are **react-select, not the older
+  Greenhouse typeahead**: click the control, type, then click the option. The
+  option only gets a non-zero bounding box once filtered.
+
+**Field-name traps on this form:**
+
+- `"Who is your current or previous employer?"` accepts the **most recent**
+  employer. This is *not* the `"Current employer"` field the `currentemployer`
+  pref governs — answering Nimbus here is correct and truthful.
+- School is a fixed 100-entry list (`Central University Mumbai`, not "Central University"); typing
+  `"Central University"` and hitting Enter does **not** select it. Clear the filter and click
+  the option.
+- Degree is a generic list (`Master of Business Administration (M.B.A.)`,
+  `Bachelor's Degree`, …). An integrated B.Tech+MBA has no combined option;
+  pick the MBA rather than understating with Bachelor's.
+- `"Please select the country where you currently reside."` and the
+  anticipate-working-in checkbox group are separate questions; check **only**
+  the countries actually applied for.
+
+**Verified:** 2026-10-03, req 8209970 (Bengaluru, Data Platform) — form staged
+end to end, 0 unfilled required fields. **Not submitted**; the candidate's
+button.
