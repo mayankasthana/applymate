@@ -53,3 +53,42 @@ Resume/CV group renders `paragraph <filename>` + a `button "Remove file"`.
   confirmation number is shown; the confirmation URL + screenshot are the proof.
 
 Verified: 2026-10-01, once (Zeta Global, job 6179911004, full submit).
+
+## Second tenant, 2026-10-03 — AlphaSense (job 8729924002), full submit
+
+Re-confirmed the widget set on a different tenant and picked up three things the
+Zeta entry did not cover.
+
+**The widget path transfers across tenants unchanged.** Phone Country and
+Location (City) behaved exactly as above on `alphasense`: `click()` → ~600 ms →
+`type()` with real keystrokes → ~1.8 s → `option` in the ARIA snapshot → click.
+The two Yes/No-style question selects are the same react-select widget, and the
+success tell is the same pair — the `option <value>, selected.` line in the
+`log` node, plus the value rendering as a sibling `generic` next to a
+`button "Clear selections"`. No CUA coordinates were needed anywhere on this
+form; plain Playwright was sufficient.
+
+**The phone input reformats as you type.** Typing `9022431617` yields the
+display value `90224 31617`. That is a mask, not a corrupted number — compare
+the digits, never the rendered string, or you will "fix" a field that is
+already right.
+
+**Finding the file input may need a shadow-DOM walk.** `document.querySelector`
+found it on this tenant, but not all Greenhouse tenants put the upload input at
+the top level. Use a small recursive search that descends into `host.shadowRoot`
+before falling back to the bare query, then the DataTransfer recipe unchanged.
+Success signal is the same: the group renders `paragraph <filename>` plus a
+`button "Remove file"`.
+
+**Forms are not uniform — check for a cover-letter field before promising one.**
+The AlphaSense board has **no** cover-letter field and no "enter manually" resume
+textarea worth using, so a tailored cover letter cannot be attached at all. A
+board can also carry questions a sibling tenant never asked: this one wanted an
+experience **band** with options `Early career (<5) / Developing (5-8) /
+Advanced (8-14) / Expert (14+)`. Do not reuse a stored band answer from another
+employer's question — the option sets differ, and the honest band depends on the
+actual years.
+
+**Verified:** 2026-10-03, AlphaSense tenant, job 8729924002 — staged end to end,
+0 unfilled required fields, submitted; confirmation page read back and
+screenshotted (`Thank you for applying.`, no confirmation number issued).
