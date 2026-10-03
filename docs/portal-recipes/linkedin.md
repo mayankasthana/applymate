@@ -84,6 +84,47 @@ is the completeness check: it lists every thread with unread messages, including
 old ones that were never triaged. Fold in the `InMail` chip to catch agency and
 recruiter pitches that were read but never logged.
 
+**A non-`You:` preview is NOT proof a reply is owed (verified 2026-10-03).** The
+preview line falls back to the thread's InMail *subject* when the sender's card
+is a recruiter pitch, so an InMail thread shows the agency's headline
+("Exciting Opportunity Senior Backend Engineer…") as the last line even after you
+have replied yourself. Two threads on the 2026-10-03 check read as inbound and
+were both outbound: the recruiter had replied in August, and the candidate's own
+recent message (with the resume attached) was the newest thing in the thread.
+**Open every non-`You:` thread before calling it owed** — the subject-line
+echo is the tell. Real inbound, once read, carries a
+`generic: <Name> sent the following message(s) at <time>` marker after your own.
+
+**The filter pills are `visibility-hidden` and `innerText`-blank — target the
+data attribute (verified 2026-10-03).** The recipe above finds the chips by
+`button` whose `innerText.trim() === 'Unread'`. That no longer matches: the chips
+now live in a `div[role=radiogroup][data-test-messaging-inbox-filters__filter-pill-group]`
+and each one carries `class="... visibility-hidden"`. `innerText` follows
+rendering, so a hidden element returns `""` and a text-equality search finds
+**nothing** — which looks exactly like "the chip is not on the page" and invites
+a false "no unread messages" conclusion. Select on the stable attribute instead:
+
+```js
+// available pills: JOB, UNREAD, CONNECTIONS, INMAIL, STARRED
+const b = document.querySelector('button[data-test-messaging-inbox-filters__filter-pill="UNREAD"]');
+const o = { bubbles: true, cancelable: true, view: window };
+b.dispatchEvent(new MouseEvent('mousedown', o));
+b.dispatchEvent(new MouseEvent('mouseup', o));
+b.dispatchEvent(new MouseEvent('click', o));
+```
+
+Verify the filter actually engaged by reading the pressed state back —
+`document.querySelector('button[data-test-messaging-inbox-filters__filter-pill][aria-pressed="true"]')`
+— before trusting the thread list it produced. A locator `click()` on the
+`Focused` folder dropdown still times out (the re-render problem); the dispatched
+triple is the working path for both the folder pills and the dropdown.
+
+**Verify the folder, not just the URL.** `https://www.linkedin.com/messaging/`
+returns the Focused list, but a filter pill set earlier in the session can persist
+across a `goto` and silently re-apply. Read `aria-pressed="true"` on the pill
+group (or the `Focused` trigger's text) in the same evaluate that reads the
+threads, so the report can state which list it actually read.
+
 ## Connection invites ("Add a note to your invitation?")
 
 **Goal:** send a connection invite with a note.
