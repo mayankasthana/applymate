@@ -92,3 +92,64 @@ actual years.
 **Verified:** 2026-10-03, AlphaSense tenant, job 8729924002 — staged end to end,
 0 unfilled required fields, submitted; confirmation page read back and
 screenshotted (`Thank you for applying.`, no confirmation number issued).
+
+---
+
+# Reading a whole Greenhouse board as JSON — and the escaped-HTML trap
+
+**Goal:** sweep an employer's entire Greenhouse board (liveness + full JD text)
+with no browser, no search UI, and no pagination.
+
+**The endpoint is public and needs no auth:**
+
+```
+https://boards-api.greenhouse.io/v1/boards/<board-token>/jobs?content=true
+```
+
+The board token is the slug in the careers URL — Databricks' is
+`boards-api.greenhouse.io/v1/boards/databricks/jobs?content=true`, which
+returned all 885 open reqs with full JD bodies in one call. Per-job liveness is
+then a substring match of the req id against `absolute_url`, e.g. `gh_jid=8679982002`.
+
+**`content` is HTML-*escaped*: `&lt;p&gt;&lt;strong&gt;`, not `<p><strong>`.**
+
+This is the whole trap, and it fails silently. Stripping tags with
+`re.sub(r"(?s)<[^>]+>", " ", ...)` matches **nothing** and returns the input
+unchanged — the regex looks correct, the output looks like text, and the escaped
+markup flows straight into the JD store. Unescape **first**, then strip:
+
+```python
+t = html.unescape(job["content"])            # MUST come first
+t = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", t)
+t = re.sub(r"(?i)</?(p|ul|ol|li|br|div|tr|h[1-6]|table)[^>]*>", "\n", t)
+t = re.sub(r"(?s)<[^>]+>", " ", t)
+t = html.unescape(t)                          # second pass, for double-escaped entities
+```
+
+**Why this matters more than a cosmetic bug:** the junk terms (`href`, `div`,
+`li`, `ul`, `nbsp`, `span`, `https`) enter the match vocabulary and drag the
+score down. A Databricks `Sr Full Stack Developer (AI Agents)` req scored
+**63/100** with escaped markup and **85/100** clean — the same JD, same dossier.
+Two more moved 69→83. This is the same failure class as the InMobi 32/100 case
+in `AGENTS.md`, and it is silent: the stored score just looks low, so the
+relevance gate quietly refuses roles that are actually strong fits.
+
+**Always assert the capture is clean before storing it** — cheap, and it is the
+only thing that catches this:
+
+```python
+leftover = len(re.findall(r"<[a-zA-Z/][^>]*>", t)) + len(re.findall(r"&(?:lt|gt|amp|nbsp|div|span|href);", t))
+assert leftover == 0, f"markup leaked: {leftover}"
+```
+
+A second tell: if `job match` lists `href`, `div`, `br`, `li`, `ul`, `nbsp`, or
+`span` in either `covered` or `missing`, the stored JD is polluted — re-capture
+and re-score rather than trusting the number.
+
+**Bonus — stored match scores go stale.** `job show` prints the score recorded
+at capture time. `job match <id>` recomputes. Five Databricks reqs sat on the
+board reading 8–26 and recomputed to 81–92. A suspiciously low score on a
+company you have applied to is worth a re-score before you believe it.
+
+**Verified:** 2026-10-03, Databricks board token, 885 jobs, 7 reqs liveness-checked
+(6 live, 1 delisted), 2 JDs captured and re-scored clean.
