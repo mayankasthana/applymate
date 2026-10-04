@@ -159,3 +159,48 @@ separate requests, which means the site stamps a fresh timestamp per page
 render. It is **not** evidence that an individual req was refreshed or is
 actively hiring. Use HTTP status plus the absence of "no longer exists" /
 "position closed" markers as the liveness check, and say nothing more.
+
+### The whole form can sit scrolled off the left edge
+
+The application page lives inside `div.template.ApplicationTemplate`, which is
+**itself horizontally scrollable** (`scrollWidth` ~2283 against a 1280
+`clientWidth`). If it ends up with a non-zero `scrollLeft` — a stray horizontal
+wheel/trackpad gesture during automation does it, and so does any horizontal
+scroll you issue while aiming at a control — the entire form renders shifted
+left and the **left third of every field, including the labels, is invisible**
+with no horizontal scrollbar to recover it: `document.documentElement.scrollWidth
+=== clientWidth`, so `window.scrollX` can never move.
+
+The symptom is easy to misread as a broken page rather than a scrolled one.
+Read `document.querySelector('.template.ApplicationTemplate').scrollLeft` when
+the layout looks wrong, and reset it:
+
+```js
+document.querySelector('.template.ApplicationTemplate').scrollLeft = 0;
+```
+
+Verify by `#main-container`'s rect x returning to ~157 (it reads **negative**
+when shifted). Re-check it after any long interaction sequence — it can drift
+again — and re-zero before reporting a visual state to the candidate.
+
+### `Add Another Employer` sits ~2000px down the page — never click it blind
+
+The add/remove controls are `div.add-another[role="button"]`, and **four**
+elements share that class across the form (Add Honors, Add Education, Add
+Another Award, Add Another Employer), so a class-scoped locator resolves to 4.
+Scope by the visible text instead, `scrollIntoView({block:'center'})` first, and
+only then read the rect and click:
+
+- The employment-history button measured **y≈2001** with a 720px viewport — far
+  below the fold. `getByRole('button', {name})` times out on actionability
+  because it is off-screen.
+- Clicking a *previously measured* coordinate after the page has scrolled is
+  unsafe: the same point lands on a different control. A stale coordinate in
+  this form hit **"Remove Employer"** and silently deleted a filled employment
+  record. Always re-measure immediately before clicking, and audit the records
+  afterwards rather than trusting the earlier fills.
+- Custom employers (anything absent from their normalized list) need the
+  no-results link "Click here to add it", which sets the select to `Other` and
+  reveals a free-text input named `#employerName-<recordIndex>`. Typing into the
+  typeahead afterwards overwrites that name with the search string — fill the
+  custom-name input **last**.
