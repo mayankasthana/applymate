@@ -692,3 +692,46 @@ next to a name is the **presence indicator**, not new mail. It renders right
 under the contact name and can read like a truncated reply
 (`Status is re...`). Check the row's actual message preview — a preview
 beginning `You:` means nothing is owed.
+
+## Sent invitations — the only honest way to check invite acceptance (verified 2026-10-04)
+
+**Goal:** find out which of the invites you sent were actually accepted, so you know which
+people can be DM'd and which are dead ends.
+
+**Naive approach fails:** there is no per-invite "accepted / declined / expired" state anywhere in
+the UI. `li` + `a[aria-label^="Withdraw invitation"]` returns `[]` — the rows are not `li` elements.
+`document.querySelectorAll('main li')` returns only 3 nav fragments. Reading the sent list does
+**not** tell you an invite was accepted; every row looks identical and every row still offers
+"Withdraw", accepted or not.
+
+**Working path:**
+
+- Navigate by clicking, not by guessing: `My Network` → `Show all invitations`
+  (`/mynetwork/invitation-manager/received/`) → the `Sent` link
+  (`/mynetwork/invitation-manager/sent/`). The `People (N)` count on that page is the size of the
+  pending pile and is the number to quote.
+- Extract rows by walking paragraphs, not by element type. DOM order within a row is
+  **name → headline → `Sent N (hours|days|weeks|months) ago`**, so from the age paragraph walk
+  back two `p` elements: `ps[i-2]` is the person's name, `ps[i-1]` is the headline.
+- The list paginates. Scroll repeatedly (`dom_cua.scroll`) and union the rows until the count you
+  collected equals the `People (N)` header — that is the completeness check, not "it looks done".
+
+**The mechanic that matters: acceptance is only observable by ABSENCE.** A pending invite stays in
+this list forever, even long past LinkedIn's expiry. An accepted invite **leaves** it and becomes
+a connection (and opens a message thread). So the question "did X accept?" cannot be answered
+from the sent list at all — the only cheap proxy is: *does a message thread with X exist in
+`/messaging/`?* Threads are therefore the real acceptance ledger, which is why
+[Inbox triage](#inbox-triage--the-unread-chip-sticks-and-it-hides-todays-threads-verified-2026-10-01)
+is the check that matters, not this page.
+
+**Consequence for outreach planning:** a "follow-up due" on a *connection note* is usually
+unactionable. LinkedIn will not DM a non-connection without spending an InMail credit, and
+re-inviting someone who already ignored one invite burns weekly quota and reads as spray. Always
+split a follow-up queue into `has a thread → DM is allowed` vs `no thread → the invite is the
+only lever left, and often shouldn't be pulled`.
+
+**Read the list for targeting quality, not just acceptance.** The Sent page is the cheapest audit
+of whether a people-search was well-aimed: off-target profiles (recruiters, EA/HR/admin roles,
+ML-titled roles when ML is excluded, DevOps/SRE titles) sitting in the pending pile mean the
+search criteria are loose and the invite spend is being wasted. Old rows (`Sent 2 months ago`) are
+effectively dead and can be withdrawn to free the weekly allowance.
