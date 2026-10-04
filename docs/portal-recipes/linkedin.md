@@ -303,6 +303,26 @@ flag, the invitation manager, the thread contents) before retrying.
 
 ## Invite dialog mechanics (2026-10-01, 4/4 wave-2 sends)
 
+**The light-DOM textarea is a 0×0 template element — scan for VISIBLE controls only**
+(verified 2026-10-04, 2/2 DE Shaw-wave sends). On `preload/custom-invite`, the note view
+starts CLOSED: a naive `document.querySelector('textarea')` finds a hidden 0×0 template
+textarea even before "Add a note" is clicked, and its zero-size rect baits a coordinate
+click at (0,0) — which lands outside the modal and **silently dismisses it** (page falls
+back to the bare messaging overlay; the preload URL stays in the address bar). The safe
+scan walks shadow roots AND filters by `getBoundingClientRect().width > 10` for both the
+TEXTAREA and the Send/Add-a-note/Connect buttons. Correct order: scan → click the visible
+"Add a note" button (evaluator `.click()`) → re-scan → `cua.click` the now-visible
+textarea's center → assert `document.activeElement.tagName === 'TEXTAREA'` → `cua.type` →
+compare `textarea.value` + live counter (`288/300`, `255/300` verified) → evaluator-dispatch
+the single "Send invitation" button (assert count 1 first) → confirm the dialog heading is
+gone → reload the profile and read the **Pending** marker as ground truth.
+
+**The dialog expires during long pauses.** A >30s gap between opening the dialog and the
+first action (harness timeout, slow call) can leave the modal gone by the time you act —
+the page text then shows no "Add a note" heading and no visible textarea. Re-observe before
+every step; if the state doesn't match what the recipe says it should be, re-open from the
+preload URL rather than acting on stale assumptions.
+
 **`goto` on `preload/custom-invite` times out but the page loads.** Observed 2 of 4
 sends: `tab.goto` threw "Navigation timed out after 10000ms" while the dialog was
 actually open behind it. Do not retry the navigation — re-observe the same tab
