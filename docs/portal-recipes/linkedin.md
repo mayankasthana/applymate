@@ -735,3 +735,61 @@ of whether a people-search was well-aimed: off-target profiles (recruiters, EA/H
 ML-titled roles when ML is excluded, DevOps/SRE titles) sitting in the pending pile mean the
 search criteria are loose and the invite spend is being wasted. Old rows (`Sent 2 months ago`) are
 effectively dead and can be withdrawn to free the weekly allowance.
+
+## The InMail-accept Send button ignores a Playwright click (verified 2026-10-04)
+
+**Goal:** send a custom reply on an inbound InMail (not the canned quick-reply body).
+
+**Naive approach fails:** after the two-step composer is open (see the quick-reply entry
+above), the `Accept this inmail from the recruiter and reply with the custom message.`
+button reports `count() === 1` and `isEnabled() === true`, and a plain Playwright
+`click()` **completes without error and sends nothing**. Every verification signal stays
+negative: `Edit reply` still present, quick replies still present, no
+`Candidate Name sent the following message` marker. This is the same class of failure as
+the quick-reply click, one level deeper — and the button's own accessible name says
+"Accept", so it is easy to believe it went.
+
+**Working path:** hover-travel then coordinate click, same as the invite dialog:
+
+```js
+const r = await tab.playwright.evaluate(() => {
+  const b = Array.from(document.querySelectorAll('button'))
+    .find(x => /Accept this inmail/.test(x.getAttribute('aria-label') || ''));
+  const box = b.getBoundingClientRect();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+});
+await tab.cua.move({ x: r.x - 220, y: r.y - 150 }); await tab.playwright.waitForTimeout(280);
+await tab.cua.move({ x: r.x - 100, y: r.y - 70  }); await tab.playwright.waitForTimeout(280);
+await tab.cua.move({ x: r.x - 30,  y: r.y - 20  }); await tab.playwright.waitForTimeout(280);
+await tab.cua.move({ x: r.x,      y: r.y       }); await tab.playwright.waitForTimeout(550);
+await tab.cua.click({ x: r.x, y: r.y });
+```
+
+That worked on the first try (1/1). **Read the geometry with `evaluate`, not from a
+screenshot** — the button sits at roughly y≈652 in a 1280×720 pane, close enough to the
+bottom edge that a screenshot-derived coordinate is easy to get wrong.
+
+**Loading the custom body.** The `textbox "Edit reply…"` is a plain `TEXTAREA`, so
+`textContent`/`innerText` both return `""`. Click it, `el.select()`, then
+`document.execCommand("insertText", false, text)` via `locator.evaluate`, then **read
+`el.value` back** as the verification. The draft survives a failed send, so a retry after
+a dead click costs nothing — confirmed on this send, where the first click was a no-op and
+the retry went out unchanged.
+
+**Bonus: the InMail-accept path converts the thread.** After a successful accept-send the
+detail pane's composer becomes an ordinary `textbox "Write a message…"`, the `Yes/No thanks`
+quick replies disappear, and replies in that thread no longer consume an InMail credit. If
+you want a TA thread to be a free conversation afterwards, this is the path.
+
+## Inbound InMail threads hide outside the Focused list (verified 2026-10-04)
+
+The Focused list on `/messaging/` is not a superset of live threads. An InMail that
+arrived several days earlier and was never replied to may be **absent from Focused
+entirely** — scrolling and "Load more conversations" will not surface it. Switch to the
+`InMail` filter chip first (the `mousedown`/`mouseup`/`click` triple on the button whose
+`innerText` is exactly `InMail`) before concluding a thread does not exist.
+
+The InMail filter is also where **untriaged inbound pitches accumulate**, which the Focused
+list hides entirely: on this run it surfaced four threads absent from Focused, including a
+recruiter pitch for a Staff Data Engineer role and a second agentic-AI InMail. Triage the
+InMail filter on every inbox pass, not just Focused.
