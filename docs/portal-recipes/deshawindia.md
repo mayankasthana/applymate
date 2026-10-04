@@ -66,3 +66,96 @@ Quality and Test Engineering, Systems. Engineering IC reqs live almost
 entirely in Core Tech (23 reqs); Front Office Tech had exactly 1; Systems is
 IT-infra/SRE track; Financial Research is analyst roles. There is no pay
 information anywhere on the site — postings state no compensation.
+
+## The apply flow (added 2026-10-04, verified end-to-end on the GAITech Strike req)
+
+### There is an "application bundle" — do NOT add a second req
+
+The job page footer carries two controls, and the distinction matters when the
+candidate's standing rule is one application per company:
+
+- **"Apply Now"** — applies to *this* req only. The req id lands in the URL.
+- **"Add job to your application bundle"** — accumulates multiple reqs into one
+  application. Using it sends several reqs to one recruiter org at once, which
+  reads as spray. Prefer "Apply Now" unless the candidate asks for a bundle.
+
+### Navigating straight to the apply URL silently fails
+
+`goto("https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS")`
+redirects to `apply.deshawindia.com/timeout.html`, title "Timeout - D. E. Shaw
+India" — an empty page, **not an error**. Read `location.href` before
+concluding anything about the form.
+
+**Working path:** load the job page, then click the real "Apply Now" link. The
+click carries the session and appends the req id:
+
+```
+https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS&source=Website&jobs=<reqId>
+```
+
+`jobs=6840` confirmed the Strike req. The header panel ("You are applying for
+the following positions: …") is the authority that the right req is bound —
+read it before filling anything.
+
+### The cookie banner blocks every footer click
+
+`button "Accept All" / "Decline All"` renders as a fixed overlay covering the
+sticky footer bar, so the first `Apply Now` click times out on actionability
+with a "covered by Cookie Banner" error. Dismiss the banner first, then click.
+("Decline All" keeps essential cookies including security — the site says so —
+and declines third-party analytics.)
+
+### Every select on this form is a react-select, and a selection is invisible in the input
+
+`Current Location`, `University`, `Degree`, `Field of Study`, `Employer Name`,
+`Honors` are react-select components. **After a successful pick the text input
+reads empty** — the search input and the committed value are different nodes.
+Reading `input.value` therefore reports a failure that did not happen.
+
+Verify with the selected-value node and the wrapper class instead:
+
+```js
+const sel = document.querySelector('#currentLocation').closest('.Select');
+sel.querySelector('.Select-value-label')?.innerText   // "Bengaluru"
+sel.className.includes('has-value')                    // true
+```
+
+### The option grid eats locator clicks — dispatch the triple
+
+`getByRole("listbox").getByText("Finance").click()` times out: the option sits
+under a `ReactVirtualized__Grid` overlay that Playwright treats as covering.
+Dispatch from page context, taking the LAST exact-text match:
+
+```js
+const lb = document.querySelector('[role="listbox"]');
+const m = Array.from(lb.querySelectorAll('*'))
+  .filter(e => e.children.length === 0 && (e.textContent || '').trim() === 'Finance');
+const t = m[m.length - 1];
+['mousedown','mouseup','click'].forEach(ty =>
+  t.dispatchEvent(new MouseEvent(ty, { bubbles: true, cancelable: true, view: window })));
+```
+
+### The option search matches full text, not acronyms
+
+Searching a react-select for `MBA` returns only
+`International Master of Business Administration (IMBA)`. The plain
+`Master of Business Administration` does not contain the string "MBA" and only
+appears when searching `Admin` or `Business`. Search a real word from the
+option text.
+
+### "Field of Study (Max 2)" does not accumulate
+
+Despite the Max 2 label, the control is single-select in practice: picking
+`Finance` **replaced** `Information Technology`. Worse, clicking the
+`"Add Field of Study"` button silently rewrote the committed value to
+`Information Security` — an unintended selection with no error. After any change
+here, re-read all `.Select-value-label` values and confirm what actually stuck.
+Add the second subject only via the Add button, then re-verify.
+
+### `datePosted` is regenerated on every render — do not read it as a repost date
+
+All three DE Shaw reqs return `datePosted` within one second of each other on
+separate requests, which means the site stamps a fresh timestamp per page
+render. It is **not** evidence that an individual req was refreshed or is
+actively hiring. Use HTTP status plus the absence of "no longer exists" /
+"position closed" markers as the liveness check, and say nothing more.
