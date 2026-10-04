@@ -204,3 +204,25 @@ only then read the rect and click:
   reveals a free-text input named `#employerName-<recordIndex>`. Typing into the
   typeahead afterwards overwrites that name with the search string — fill the
   custom-name input **last**.
+
+### Submission confirmation — a green page and no reference number
+
+Finishing the form navigates to
+`https://www.apply.deshawindia.com/application-success.html`, title
+"Success - D. E. Shaw India", rendering a green panel:
+
+> **Submission Success** — "Your application has been successfully submitted.
+> Press any key or click here to go to the HOMEPAGE"
+
+**No application id, requisition reference or confirmation number is issued** —
+like Lever, the success page itself is the only proof, so screenshot it as the
+`submit-screenshot` evidence and pass `--confirmation "(none issued)"` to
+`app submitted`. Do not go looking for a number on a follow-up screen; there
+isn't one, and the page offers only a link back to the careers homepage.
+
+The `Finish` control is a `div.button-big.button-big-next.right-aligned` at the
+very bottom of the single page (~y 2328 before scrolling), not a `<button>`.
+Scroll it to `block:'center'`, re-measure, confirm
+`document.elementFromPoint(cx, cy)` is the div itself, then hover-travel and
+click. Verify the outcome by `location.href` ending in `application-success.html` —
+a click that silently fails leaves the form fully populated and looks untouched.
