@@ -293,6 +293,34 @@ no ML/DS-titled, not already on the board). Treat LinkedIn as a *discovery*
 surface only — every req still needs its JD pulled from the guest posting
 endpoint and liveness-checked on the company board.
 
+**Re-verified 2026-10-04** — the recipe above held exactly as written. 8
+keyword/location pairs (2 per `evaluate` cell) returned 100 cards; 7 were
+already on the board by LinkedIn job id, and a **company+title fuzzy dedupe
+caught a further ~20 that the id check missed**, because the same req is
+mirrored under different ids (e.g. Extreme Networks 10356 vs 10357/8/9, all
+four on the board already). Do the id check *and* the company+title check;
+the id check alone would have re-added five Extreme siblings.
+
+**Keyword pairs that actually produced agentic/AI-platform hits** (the
+candidate's on-profile area) — worth repeating on a future sweep:
+`Staff Engineer AI platform` + Bengaluru, and the generic
+`Distinguished Engineer` + India. The plain `Staff Software Engineer` +
+Bengaluru sweep returned mostly Node.js/Golang/kernel reqs with no AI layer.
+Conversely `&f_WT=2` (remote) returned heavy Chennai/Pune noise.
+
+**Screenshot loop times out — one `goto` + screenshot per cell.** Six
+`goto`+`screenshot` pairs in a single `js` cell aborted on timeout. Two per
+cell is the reliable ceiling, same root cause as the 3000 ms `evaluate`
+cap. Screenshots must also be emitted with
+`nodeRepl.emitImage(await tab.screenshot())` in the same cell — returning
+the `Uint8Array` (or writing it to disk alone) fails with `UnknownVizError`.
+
+**Applicant counts are readable from the detail page's text layer** — a
+useful competition signal the search cards don't carry:
+`/Over ([\d,]+) applicants?/`. EnCharge's 92/100 req showed "Over 100
+applicants" ~1 day after repost; Equinix's showed 100. Worth reporting
+alongside the score, since it changes whether a referral is the only lever.
+
 ## Verification discipline (learned from silent failures)
 
 LinkedIn sometimes drops an action silently — an invite that shows no error
