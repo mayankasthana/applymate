@@ -153,3 +153,35 @@ company you have applied to is worth a re-score before you believe it.
 
 **Verified:** 2026-10-03, Databricks board token, 885 jobs, 7 reqs liveness-checked
 (6 live, 1 delisted), 2 JDs captured and re-scored clean.
+
+## Greenhouse behind a company's own marketing site (verified 2026-10-04, Nextiva)
+
+**Goal:** read and liveness-check a req when the company's careers page is marketing
+site, not a Greenhouse-hosted board, and the board token is nowhere in the HTML.
+
+**Naive approach fails:** the marketing page only embeds `greenhouse.js`. There is no
+`job-boards.greenhouse.io/<tenant>` string, no `board_token`, and no iframe src in the
+DOM, so token-hunting on the page finds nothing. LinkedIn's company page is also a dead
+end here: the employer button is a `button` with no href and its `.click()` times out.
+
+**Working path:**
+
+1. Find the careers URL from the company's **own site navigation**, never by guessing a
+   path. From `nextiva.com`, an `a[href]` innerText+href sweep matching
+   `/career|job|hiring|join/i` returned the real one on the first try:
+   `nextiva.com/company/careers`.
+2. Read the listing rows with an `a[href*="gh_jid"]` sweep — that param is the give-away
+   that the listing is Greenhouse-backed, and each row href
+   (`.../careers-listing.html?gh_jid=<id>`) is a directly navigable posting. One
+   `evaluate` returning `href :: title` for every row gets the **entire board** in a
+   single call; on Nextiva that was all 27 listings, no pagination needed.
+3. A posting's JD lives entirely in `domSnapshot()` — headings, `Responsibilities`,
+   `Basic Qualifications`, `Preferred Qualifications` all render as plain ARIA text, so
+   slice the snapshot rather than evaluating selectors (the `main p, li` extraction
+   returns a flattened, order-shuffled 3KB blob; the snapshot is the reliable read).
+
+**The board is also the test for an unpublished req.** A recruiter pitching a title that
+does not appear on the company's own board is pitching either an unpublished seat, a
+renamed posting, or a different req entirely. Diffing the pitch against the full board
+inventory is cheap and is the only way to know which one before tailoring — do not
+assume they are the same req.
