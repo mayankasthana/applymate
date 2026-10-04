@@ -43,11 +43,29 @@ Enter are ignored by the overlay's React handler.
   (2) the compose box `textContent` length now 0, (3) Send `disabled` again.
   Overlay timestamps can render in a shifted timezone — the marker plus empty
   compose is the ground truth, not the wall-clock time shown.
-- **Send click silently eaten** (2026-10-01, 2× on a fresh compose render):
+- **Send click silently eaten** (2026-10-01, 2× on a fresh compose render; again
+  2026-10-04 on a reply carrying an attachment, so it is not a fresh-render-only bug):
   hover-travel + dwell clicks left the draft in the compose box with no error.
-  The working fallback is the field-note remedy: `evaluate`-dispatch the
-  button's own `click()` (`document.querySelector('button[type="submit"]').click()`),
-  then re-verify with the three signals above.
+  The working fallback is the field-note remedy: `evaluate`-dispatch the button's
+  own `click()`, then re-verify with the three signals above. Scope the lookup to
+  the compose form — `button[type=submit]` alone also matches the send-options
+  button sitting beside it:
+  ```js
+  const box = document.querySelector('div[role="textbox"][aria-label="Write a message…"]');
+  const form = box.closest('form');
+  const btns = Array.from(form.querySelectorAll('button'))
+    .filter(b => b.type === 'submit' && /Send/.test(b.innerText || b.getAttribute('aria-label') || ''));
+  if (btns.length !== 1) throw new Error('send btn count ' + btns.length);
+  btns[0].click();
+  ```
+- **Assert on the *new* marker, not on a marker matching your own name** (learned
+  2026-10-04): after the eaten click, `body.innerText` still matched
+  `Candidate Name sent the following message` — that was the *earlier* message in
+  the same thread, and reading it as success would have called a failed send
+  delivered. Take the full match list, confirm the count went up and the newest
+  timestamp is the one just sent. The attachment bubble
+  (`PDF <name> 263 KB Download`) is the strongest single signal that a
+  text+attachment message actually left the composer.
 
 **Opening a different conversation in the inbox (verified 2026-10-01, 3/3):**
 the conversation-list card is a `div.msg-conversation-listitem__link[tabindex=0]`
