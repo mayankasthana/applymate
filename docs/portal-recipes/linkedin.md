@@ -205,6 +205,40 @@ logged-in `/jobs/view/<id>/` page only for the header screenshot
 (`--kind jd-screenshot`, it shows the Easy Apply button and applicant
 count). Verified 2026-10-01 on job 4474128132 (Hiver).
 
+**The JD endpoint needs no browser at all — curl it (verified 2026-10-04,
+job 4465911864 / JPMorgan Chase).** This is the cheap half of the entry above
+and it is worth separating out: unlike the *search* endpoint further down (which
+must be fetched from page context so it runs same-origin with the session), the
+`jobPosting` endpoint answers a plain unauthenticated `curl` with a browser UA:
+
+```bash
+curl -sL --max-time 25 -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
+AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" \
+  "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/<id>" -o jd.html
+# HTTP 200, ~68 KB, description present in .show-more-less-html__markup
+```
+
+So capturing a JD for an id you already have costs no browser round-trip — no
+`goto`, no wait, no screenshot-cell budget. Only spend the browser on the header
+screenshot, which genuinely does need the logged-in session.
+
+**Applicant counts differ by source — they are not the same number.** On the same
+posting the guest endpoint's `topcard__flavor` spans read `74 applicants` while the
+logged-in header read `79 people clicked apply`. Same run, minutes apart: the
+guest value is a server-rendered applicant count, the header value is LinkedIn's
+own "people clicked apply" metric and it moves live. Quote one with its label
+attached; do not treat a difference between them as a bug or silently prefer the
+rounder-looking one.
+
+Parsing notes for this endpoint: the description is one
+`.show-more-less-html__markup` block, but the **company and location regexes
+both false-positive** — `topcard__org-name-link` does not always match and the
+`top-card-layout__first-subline` fallback returns the *company name*, not the
+location. Read location by iterating every `topcard__flavor` span and discarding
+the one equal to the company. The same span family also carries the posted-age
+and applicant strings, so one loop over `topcard__flavor` yields company,
+location, age and applicant count together.
+
 ## Sweeping new postings — the classic search UI is retired (verified 2026-10-03)
 
 **Goal:** find everything posted in the last week matching a role + location,
