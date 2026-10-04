@@ -24,6 +24,7 @@ employers share an ATS, so a `workday.md` recipe serves every Workday tenant:
 |---|---|---|
 | [ashby.md](ashby.md) | jobs.ashbyhq.com boards — finding the board from a marketing careers page, UUID job links, reading roles + remote type, single-posting JD + liveness | 2026-10-02 |
 | [atlassian.md](atlassian.md) | atlassian.com careers — liveness-checking a req, bypassing the unusable function/country filters, remote confirmation | 2026-10-01 |
+| [deshawindia.md](deshawindia.md) | deshawindia.com careers — the counter lies (all category cards are in the DOM), category dropdown ignores locator clicks (evaluate-dispatched clicks; last-match wins over nav links), JD body slicing, no pay info on the site | 2026-10-04 |
 | [eightfold-careers.md](eightfold-careers.md) | Eightfold `careers.<company>.com` boards — country-facet-then-search (the keyword box is semantic and the LOCATION box self-fills), hidden facet checkboxes, per-job liveness fields | 2026-10-02 |
 | [greenhouse.md](greenhouse.md) | greenhouse.io job boards — typeahead flyout fields, chip-selection verification, DataTransfer resume upload, submit/confirmation flow | 2026-10-01 |
 | [gmail.md](gmail.md) | mail.google.com — read-only IMAP via app password, confirming vs knock-out rejection classification; composing and sending with attachments via DataTransfer injection + loopback byte server | 2026-10-02 |
