@@ -191,3 +191,87 @@ this is the portal being down, not the automation. Re-verify liveness on a
 later day and resume the staged application; the upload is server-side and a
 fresh session may already carry the resume.
 
+## The CareerConnect multi-step apply form — form state does not live in the DOM (careers.hpe.com, 2026-10-04)
+
+**Goal:** fill a 5-step Phenom apply form (My information → My experience →
+Application questions → Voluntary disclosures → Review) from stored answers.
+
+**Naive approach fails — and fails *quietly*, which is the dangerous part:**
+
+- `selectOption` and `fill` report success, the DOM shows the value, and a
+  later re-render **wipes every answer back to its default**. The step then
+  refuses to advance with "This field is required." on fields that visibly hold
+  a value. This form is `react-jsonschema-form`; the widget's DOM value and the
+  form's `formData` are two different things, and only the latter is validated
+  and saved.
+- Real keystrokes are not a reliable escape either. `focus()` + `cua.type()`
+  into the textarea put "N/A" in the DOM and it *survived re-renders*, yet
+  `rawErrors` stayed `["This field is required."]` — the keystrokes never
+  reached `formData` either.
+- Arrow keys and type-ahead on a focused `<select>` do nothing, and the native
+  dropdown is not reachable by coordinate click.
+- Reading the page is itself unreliable: consecutive `evaluate` calls return
+  wildly different trees (39 inputs one call, 1 the next) because the app
+  re-renders continuously. **Never conclude a field is unfilled from a single
+  read — re-read before acting.**
+
+**Working path — drive the React handler directly, with an event-shaped arg:**
+
+```js
+// SELECT: the widget's own onChange (arity 1) takes an EVENT, not a value.
+// Passing a bare string throws "Cannot read properties of undefined (reading 'value')".
+const opt = Array.from(s.options).find(o => o.text.trim() === 'No');
+const fk = Object.keys(s).find(k => k.startsWith('__reactInternalInstance$') || k.startsWith('__reactFiber$'));
+s[fk].memoizedProps.onChange({ target: { value: opt.value, name: s.id },
+                               currentTarget: { value: opt.value },
+                               preventDefault(){}, stopPropagation(){}, persist(){} });
+```
+
+This is the eBay `onChange`-on-the-input pattern again, applied to `<select>`.
+
+**The textarea needs its PARENT handler, not the widget's.** Calling the
+widget-level `onChange` with the same event shape runs without error and still
+leaves `rawErrors: ["This field is required."]`. Commit it one level up, where
+the handler has arity 2 and takes `(value, id)`:
+
+```js
+const ta = document.querySelector('textarea');
+const fk = Object.keys(ta).find(k => k.startsWith('__reactInternalInstance$'));
+ta[fk].return.memoizedProps.onChange('Not Applicable (N/A)', ta.id); // (value, id)
+```
+
+`rawErrors` then goes `null` and the `field-error has-error` classes clear.
+Verify with `f.return.memoizedProps.rawErrors`, not with the DOM value.
+
+**Proof the resume reached the server:** a `fileDownload?...&fileName=…` anchor
+rendered on the page. That link is the only reliable upload receipt — the chip
+and `isResume`/`applySource` hidden fields are not always in the DOM when you
+look. Upload via the depth-0 file-input `onChange` (see the eBay entry above;
+HPE is the same shape — no `beforeUpload` anywhere up the fiber).
+
+**Checkboxes:** real coordinate clicks (hover-travel included) do nothing.
+`el.click()` from `evaluate` toggles it and React accepts it.
+
+**Next button:** locator clicks time out (constant micro-renders) and the
+button is `disabled` while validation is pending, so a coordinate click does
+nothing and looks like a dead portal. Enlarge the viewport so the control is
+above the fold — `setViewportSize({width:1280, height:1400})` — then
+`b.click()` from `evaluate` on the button whose `innerText` is exactly `Next`.
+It advances even while `disabled` is still true, so don't gate on that flag.
+
+**Step navigation is locked.** The step bar is a slick slider; clicking a step
+the server hasn't marked complete does nothing even though the anchor exists.
+Move forward with **Next** only. Once a step has been completed with Next, its
+answers persist server-side and survive navigating away and back — re-verify
+after any jump, because the progress dots can lag.
+
+**Attachments: one slot only.** Both file inputs report `multiple: false` and
+there is no "add attachment" control (only "+ Add Certificates"). Uploading a
+second document — e.g. a cover letter — **replaces the resume**. Don't risk a
+complete application on it; send the cover letter by another channel instead.
+
+**Verified** 2026-10-04 on careers.hpe.com req 1216021 (Bengaluru), 5 steps,
+resume parsed and all five work-experience date ranges matching the source
+resume to the month, 9 screening answers, staged through to Review with all
+five step dots green.
+
