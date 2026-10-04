@@ -893,3 +893,67 @@ The InMail filter is also where **untriaged inbound pitches accumulate**, which 
 list hides entirely: on this run it surfaced four threads absent from Focused, including a
 recruiter pitch for a Staff Data Engineer role and a second agentic-AI InMail. Triage the
 InMail filter on every inbox pass, not just Focused.
+
+## Reading people-search cards: parse the DOM from `/in/` anchors, not the ARIA snapshot (verified 2026-10-04)
+
+**Goal:** pull a `keywords` + `network=["S"]` people search into structured rows
+(name, handle, degree, headline, location) so they can be deduped against
+`outreach list`.
+
+**Naive approach fails:** slicing `domSnapshot()` on `- link "` and regexing the
+accessible name is **unreliable here** — the name is nested one level down inside
+a `- text:` node, and the aria label concatenates the name with the degree,
+headline, location *and* the mutual-connection names. Parsing it returns single
+letters (`"R"`, `"S"`), `"is a mutual connection"`, or `"\",\""` as the name on
+most rows. `document.querySelectorAll('[data-view-name]')` — the usual
+LinkedIn-card hook — returns an **empty list** on this page, so the usual
+`[data-view-name="people-search-result"]` card selector finds nothing.
+
+**Working path:** walk up from each `a[href*="/in/"]` and stop at the ancestor
+whose text already contains the company, then read that container's lines:
+
+```js
+const seen = new Set(); const people = [];
+for (const a of document.querySelectorAll('a[href*="/in/"]')) {
+  const m = (a.getAttribute('href') || '').match(/\/in\/([^/?]+)/);
+  if (!m || seen.has(m[1])) continue;
+  let card = a;
+  for (let i = 0; i < 8 && card.parentElement; i++) {
+    card = card.parentElement;
+    const t = card.innerText || '';
+    if (t.includes('JPMorgan') || t.includes('JpMorgan') || t.includes('Chase')) break;
+  }
+  const lines = (card.innerText || '').split('\n').map(s => s.trim()).filter(Boolean);
+  if (!lines.length) continue;
+  seen.add(m[1]);
+  people.push({ handle: m[1], name: lines[0], rest: lines.slice(1, 5) });
+}
+```
+
+Two things to expect in the output. **Mutual-connection links inherit the
+previous card's text** — the anchor for a shared connection sits inside the
+neighbouring card, so it comes back with the *other* person's name and headline.
+Read `rest[0]` (`"• 2nd"`) and drop any row whose name repeats the previous one.
+And the card's trailing element is the action button, so `Connect` vs `Follow`
+is simply the last line of `rest` — useful, but see below before filtering on it.
+
+**A `Follow` button is still Connectable — 2nd confirmation (2026-10-04).** A
+card whose only affordance read `Follow` (an SDE III at the target company, 2nd
+degree, no Connect offered) accepted a connection invite through
+`preload/custom-invite/?vanityName=<handle>` exactly like the others in the same
+wave. Combined with the 2026-10-01 finding this now holds 2/2 — never pre-filter
+a people-search candidate on the card's button.
+
+**Inviting from a search result still needs the dialog-target check.** The recipe
+above warns that `/preload/custom-invite/` can render the *previous* person; that
+did not misfire here, but the check is one evaluate and caught every row before
+typing: read `(dialog.innerText.match(/invitation to ([A-Za-z]+ [A-Za-z]+?) by/)||[])[1]`
+and abort unless it matches the intended name. Note that this regex returns
+`null` once the note view opens (the phrasing changes), so take it on the
+`Add a note?` prompt, before dispatching the "Add a note" click.
+
+**A character-count guard is worth the ceremony.** One send was blocked mid-wave
+by a verify call that referenced an undefined variable; the guard compared the
+typed `textarea.value` against the intended string and refused to dispatch Send.
+That is the right failure — a truncated or doubled type is caught before the
+invite is spent, and the draft survives for a clean retry.
