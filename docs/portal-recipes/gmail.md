@@ -59,6 +59,37 @@ Notes that matter:
 - **Walk all parts and prefer `text/plain`.** These messages are `text/html`
   with a `<style>` block as the first part, so naive payload decoding returns
   CSS, not prose. Strip tags after extraction.
+- **ALWAYS dump the part tree before concluding a mail has no substance.**
+  `multipart/mixed` wraps `multipart/alternative` (text/plain + text/html) and
+  then **sibling attachment parts**. A walker that only descends for
+  `text/plain`/`text/html` silently drops every attachment — verified
+  2026-10-05, when a recruiter forward read as "no JD, no requisition, no
+  requirements" and was registered on the board at 66/100 off the pitch alone.
+  The JD was `application/pdf` attached as the third part; scoring against the
+  real document moved it to **79/100 strong** and flipped the pursuit verdict
+  amber → green. Print the tree first, cheaply, every time:
+
+  ```python
+  def show(m, depth=0):
+      print("  "*depth, m.get_content_type(), "filename=", m.get_filename())
+      if m.is_multipart():
+          for p in m.get_payload(): show(p, depth+1)
+  ```
+
+- **Recursion guard is required, not optional.** `message/rfc822` and
+  `multipart/digest` parts contain nested messages that re-enter the walker;
+  without a depth cap or an explicit skip you get
+  `RecursionError: maximum recursion depth exceeded` on ordinary forwarded mail.
+  Skip those content types and cap depth.
+- **Extract attachment bytes with `get_payload(decode=True)`** and write them
+  next to the capture — a recruiter-attached JD PDF is the real JD, and it
+  belongs in `job evidence --kind jd-screenshot` like any other capture.
+- **ReportLab PDFs need a manual text pull.** These JDs (Kily, 2026-10-05) are
+  ASCII85 + Flate with `Tj`/`TJ` operators; `pdftotext` is not installed and
+  the file-read tool returns raw PDF internals. Decode per `stream…endstream`:
+  `base64.a85decode` (strip a trailing `~>` first), then `zlib.decompress`,
+  then collect `((…))` literals inside each `BT…ET` block. See the snippet in
+  `scripts/` if one exists, otherwise re-derive from this note.
 - **IMAP returns one message per MIME part, not per Gmail thread.** The web UI
   groups four Workday confirmations into one thread and shows "4"; IMAP returns
   them as four separate UIDs. Count accordingly.
