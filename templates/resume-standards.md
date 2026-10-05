@@ -34,6 +34,37 @@ node bin/applymate.ts profile note export resume-standards ~/somewhere/safe.md
 - **Any wording corrections** where the obvious phrasing is wrong — e.g. how to
   describe contributions that landed through a maintainer workflow.
 
+## The linter enforces these; run it before anything goes to a portal
+
+```
+node bin/applymate.ts resume check <appId>     # or --all
+```
+
+`app move <appId> ready` — the last state before a portal upload — is **gated**:
+it refuses to move on an `error` and prints the rule, the offending line, and
+the fix. `--force` overrides when a finding is wrong. Advisory findings
+(`warn`, currently the length budgets) never block.
+
+The `error` rules are the ones a portal or a recruiter actually punishes:
+
+| rule | what goes wrong without it |
+|---|---|
+| `meta-line-title-joined` | parser merges two positions into one |
+| `meta-line-company-decorated` | parser drops the company |
+| `meta-line-date-on-heading` | dates land on the wrong block |
+| `meta-line-date-malformed` | the date reads as free text, not a range |
+| `target-company-named` | advertises that the document was assembled for one posting |
+| `filename-not-generic` | the filename itself leaks the target to whoever opens it |
+| `filename-names-company` | as above, named explicitly |
+| `filename-names-other-company` | a stale or mis-registered upload went out |
+| `artifact-foreign-dir` | one application points at another's files |
+| `fact-drift` | two variants disagree on a date or a title |
+
+The `warn` rules are judgment calls, not faults: `summary-too-long`,
+`resume-too-long`, `company-multi-resume`, `referral-collision`.
+
+---
+
 ## The invariants — these hold for everyone, refine them if you like
 
 - **One title per line.** Every position is its own block: company line, then

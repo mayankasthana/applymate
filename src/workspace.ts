@@ -9,6 +9,7 @@ import { ProfileStore } from "./services/profile.ts";
 import { EvidenceStore } from "./services/evidence.ts";
 import { OutreachService } from "./services/outreach.ts";
 import { ReminderService } from "./services/reminders.ts";
+import { ResumeLintService } from "./services/resume-lint.ts";
 import { Application, Job, OutreachMessage, Reminder } from "./domain.ts";
 
 /**
@@ -49,6 +50,33 @@ export function makeServices(config: Config) {
     entityName: "application",
     validate: (r) => Application.validate(r),
   });
+  const outreach = new OutreachService({
+    messages: new JsonCollection<OutreachMessage>({
+      dir: paths.outreach,
+      entityName: "outreach message",
+      validate: (r) => OutreachMessage.validate(r),
+    }),
+  });
+  const profile = new ProfileStore({ dir: paths.profile });
+  const reminders = new ReminderService({
+    reminders: new JsonCollection<Reminder>({
+      dir: paths.reminders,
+      entityName: "reminder",
+      validate: (r) => Reminder.validate(r),
+    }),
+  });
+  // The lint needs the canonical upload filenames (config) and the outreach
+  // threads (to spot a referral competing with a spray).
+  const resumeLint = new ResumeLintService({
+    applications,
+    jobs,
+    workspaceRoot: paths.root,
+    outreach,
+    canonicalFilenames: [config.resumeFilename, config.coverLetterFilename].filter(
+      (n): n is string => typeof n === "string" && n.length > 0,
+    ),
+  });
+
   return {
     paths,
     config,
@@ -56,22 +84,11 @@ export function makeServices(config: Config) {
     applications,
     pipeline: new PipelineService({ jobs, applications, minMatchScore: config.minMatchScore }),
     chat: new ChatLog({ filePath: paths.chatLog }),
-    profile: new ProfileStore({ dir: paths.profile }),
+    profile,
     evidence: new EvidenceStore({ jobs, applications, workspaceRoot: paths.root }),
-    outreach: new OutreachService({
-      messages: new JsonCollection<OutreachMessage>({
-        dir: paths.outreach,
-        entityName: "outreach message",
-        validate: (r) => OutreachMessage.validate(r),
-      }),
-    }),
-    reminders: new ReminderService({
-      reminders: new JsonCollection<Reminder>({
-        dir: paths.reminders,
-        entityName: "reminder",
-        validate: (r) => Reminder.validate(r),
-      }),
-    }),
+    outreach,
+    reminders,
+    resumeLint,
   };
 }
 

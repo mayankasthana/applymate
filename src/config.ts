@@ -18,6 +18,12 @@ export interface PersistedConfig {
   chatPort: number;
   /** Applications below this dossier-match score are refused unless forced. */
   minMatchScore: number;
+  /** The candidate's own resume filename on every portal. Portals show the
+   *  uploaded filename to recruiters, so it must never name a company or role.
+   *  null disables the generic-filename check rather than guessing. */
+  resumeFilename: string | null;
+  /** The candidate's own cover-letter filename on every portal. */
+  coverLetterFilename: string | null;
   /** Glob patterns forcing dossier files into the match vocabulary (evidence of real experience); wins over reference globs. */
   dossierProfileGlobs: string[];
   /** Glob patterns keeping dossier files out of the match vocabulary (prep, archives). */
@@ -38,6 +44,10 @@ export const DEFAULT_CONFIG: Readonly<PersistedConfig> = Object.freeze({
   autonomy: "draft",
   chatPort: 4388,
   minMatchScore: 60,
+  /** The candidate's own resume filename on every portal (never company- or role-named). */
+  resumeFilename: null,
+  /** The candidate's own cover-letter filename on every portal. */
+  coverLetterFilename: null,
   dossierProfileGlobs: [],
   dossierReferenceGlobs: [],
 });
