@@ -44,7 +44,11 @@ Enter are ignored by the overlay's React handler.
   Overlay timestamps can render in a shifted timezone — the marker plus empty
   compose is the ground truth, not the wall-clock time shown.
 - **Send click silently eaten** (2026-10-01, 2× on a fresh compose render; again
-  2026-10-04 on a reply carrying an attachment, so it is not a fresh-render-only bug):
+  2026-10-04 on a reply carrying an attachment; and **2/2 again on 2026-10-05 —
+  one text+attachment, one plain text with no attachment at all** — so it is
+  neither a fresh-render-only bug nor attachment-specific. Treat the
+  hover-travel click as a first attempt, not the working path, and fall through
+  to the evaluate-dispatch immediately):
   hover-travel + dwell clicks left the draft in the compose box with no error.
   The working fallback is the field-note remedy: `evaluate`-dispatch the button's
   own `click()`, then re-verify with the three signals above. Scope the lookup to
@@ -1037,6 +1041,60 @@ Above ~90% it is a retitle or a mirror; below ~30% they are different jobs. This
 is the same test that catches the Extreme Networks and Amazon duplicate clusters
 in the sweep entry above, but it works on JD *bodies* rather than titles — which
 matters because a retitle breaks every title-based dedupe.
+
+## Three mechanics settled on 2026-10-05 (two sends, both verified)
+
+**1. The send click is eaten on plain text too — go straight to evaluate-dispatch.**
+Two sends in one session, both with the documented hover-travel + dwell click:
+the text+attachment one and a **text-only message with no attachment at all**.
+Both times the click landed, no error surfaced, and the draft sat in the compose
+box with the marker count unchanged. So the 2026-10-04 note ("a reply carrying an
+attachment, so it is not a fresh-render-only bug") can be tightened: the eaten
+click is neither fresh-render-only **nor** attachment-specific. Run the
+hover-travel, read the three signals, and if the draft is still there dispatch
+the form's own `click()` — but do not spend two attempts hoping. Both sends on
+this run delivered on the first evaluate-dispatch, 2/2.
+
+**2. Guard on the thread `h2` before typing — the open tab drifts.**
+Between reading a thread and typing into it, the tab was moved to a *different*
+thread (`?filter=inmail` still on the URL), and an out-of-band view of the tab
+reported a third URL that was simply wrong. The cheap guard, run before every
+`execCommand` insert, is the recipe's existing "read the dialog's own text"
+move applied to threads:
+
+```js
+const who = await tab.playwright.evaluate(() => {
+  for (const el of document.querySelectorAll('h2'))
+    if (/^Mustufa Khan$/.test((el.innerText || '').trim())) return 'Mustufa Khan';
+  return null;
+});
+if (who !== 'Mustufa Khan') throw new Error('wrong thread open, heading=' + who);
+```
+
+This caught a real misfire before anything was typed. Cost: one evaluate.
+Never trust a remembered tab state, and never trust ambient/UI state that
+describes the tab — re-derive the thread identity from the page.
+
+**3. Message attachments cannot be saved programmatically — ask the candidate.**
+Anu Krishnan sent `JD_Staff AI Engineer.docx` (20 KB) as a thread attachment.
+Both documented download routes fail, in different ways:
+
+- `locator.downloadMedia()` on the `button "DOC JD_Staff AI Engineer.docx 20 KB Download"`
+  → `Error: Matched element does not expose a downloadable URL`. The button is
+  not backed by an href.
+- `waitForEvent("download")` + `click()` → the event **does fire**, and the
+  returned `PlaywrightDownload` is a **stub**: `Object.keys()` is `[]`,
+  `suggestedFilename` is `null`, and `dl.saveAs` is not a function. Nothing
+  reaches disk — `~/Downloads` was unchanged afterwards.
+
+So a JD that only exists as a LinkedIn message attachment has to be downloaded
+by the candidate by hand, then the agent picks it up off the filesystem. Say so
+plainly and ask; do not burn calls re-deriving URLs. (Once the candidate has
+dropped the file, `unzip -p <docx> word/document.xml` plus a tag strip recovers
+the text cleanly, and the `.md` is what `job add --file` and
+`job evidence --kind jd-snapshot` both accept — `.docx` itself is rejected as an
+evidence type.)
+
 
 **`coupang.jobs` is Greenhouse, and the board API answers the liveness question
 for free (2026-10-05).** The site 403s every plain request (`/api/jobs`,
