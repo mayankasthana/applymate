@@ -235,6 +235,204 @@ test("state endpoint aggregates actions: overdue decisions, follow-ups due, stag
   });
 });
 
+test("state endpoint filters and sorts through query parameters", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const strong = await services.pipeline.addJob({ company: "Zeta", title: "Staff Engineer", description: "kafka" });
+    const weak = await services.pipeline.addJob({ company: "Alpha", title: "Engineer II", description: "kafka" });
+    const strongApp = await services.pipeline.startApplication(strong.id);
+    const weakApp = await services.pipeline.startApplication(weak.id);
+    await services.pipeline.setMatch(strongApp.id, { score: 91 });
+    await services.pipeline.setMatch(weakApp.id, { score: 55 });
+
+    const state = async (q: string) =>
+      (await (await fetch(base + "/api/state" + q)).json()) as {
+        pipeline: Record<string, { id: string }[]>;
+        board: { total: number; shown: number; sort: string; minScore: number };
+      };
+
+    const shown = async (q: string) => Object.values((await state(q)).pipeline).flat().map((a) => a.id).sort();
+
+    assert.deepEqual(await shown("?minScore=80"), [strongApp.id]);
+    assert.deepEqual(await shown("?sort=company"), [strongApp.id, weakApp.id].sort());
+    assert.deepEqual(await shown("?status=discovered"), [strongApp.id, weakApp.id].sort());
+    assert.deepEqual(await shown("?status=ready"), []);
+    assert.deepEqual(await shown("?q=zeta"), [strongApp.id]);
+
+    // Junk parameters narrow nothing instead of erroring.
+    assert.equal((await state("?minScore=abc&pursuit=purple&sort=sideways")).board.shown, 2);
+
+    const unfiltered = await state("");
+    assert.equal(unfiltered.board.total, 2);
+    assert.equal(unfiltered.board.shown, 2);
+    assert.equal(unfiltered.board.sort, "recent");
+    const filtered = await state("?minScore=80");
+    assert.equal(filtered.board.total, 2, "the total is the whole board, not the view");
+    assert.equal(filtered.board.shown, 1);
+    assert.equal(filtered.board.minScore, 80);
+  });
+});
+
+test("state endpoint sorts a lane by pay, without ranking currencies against each other", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const usd = await services.pipeline.addJob({ company: "Euro Co", title: "Staff", description: "kafka" });
+    const inr = await services.pipeline.addJob({ company: "India Co", title: "Staff", description: "kafka" });
+    const none = await services.pipeline.addJob({ company: "Quiet Co", title: "Staff", description: "kafka" });
+    const usdApp = await services.pipeline.startApplication(usd.id);
+    const inrApp = await services.pipeline.startApplication(inr.id);
+    const noneApp = await services.pipeline.startApplication(none.id);
+    await services.pipeline.setJobComp(usd.id, { low: 200_000, high: 260_000, currency: "USD", basis: "posted" });
+    await services.pipeline.setJobComp(inr.id, { low: 8_000_000, high: 9_000_000, currency: "INR", basis: "posted" });
+
+    const state = (await (await fetch(base + "/api/state?sort=pay")).json()) as {
+      pipeline: { discovered: { id: string; pay: { label: string; basis: string | null } }[] };
+    };
+    // INR sorts before USD (currency alphabetical), and the card with no figure
+    // is last rather than being treated as zero.
+    assert.deepEqual(state.pipeline.discovered.map((c) => c.id), [inrApp.id, usdApp.id, noneApp.id]);
+    assert.deepEqual(state.pipeline.discovered.map((c) => c.pay.label), ["₹80–90L", "$200–260K", "no pay figure"]);
+    assert.deepEqual(state.pipeline.discovered.map((c) => c.pay.basis), ["posted", "posted", null]);
+  });
+});
+
+test("pay filters split cards that have a figure from those that do not", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const withPay = await services.pipeline.addJob({ company: "Paid Co", title: "Staff", description: "kafka" });
+    const without = await services.pipeline.addJob({ company: "Quiet Co", title: "Staff", description: "kafka" });
+    await services.pipeline.setJobComp(withPay.id, { low: 40_000, high: 50_000, currency: "GBP", basis: "posted" });
+    await services.pipeline.startApplication(withPay.id);
+    await services.pipeline.startApplication(without.id);
+
+    const shown = async (q: string) => {
+      const state = (await (await fetch(base + "/api/state" + q)).json()) as { pipeline: Record<string, { company: string }[]> };
+      return Object.values(state.pipeline).flat().map((c) => c.company).sort();
+    };
+    assert.deepEqual(await shown("?pay=with"), ["Paid Co"]);
+    assert.deepEqual(await shown("?pay=without"), ["Quiet Co"]);
+    assert.deepEqual(await shown("?pay=with&minScore=50"), [], "filters combine");
+  });
+});
+
+test("the floor is read from the candidate's own preference and compared in-currency only", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    await fetch(base + "/api/prefs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key: "salaryFloor", value: "60 LPA (INR)" }),
+    });
+    const below = await services.pipeline.addJob({ company: "Low Co", title: "Staff", description: "kafka" });
+    const usd = await services.pipeline.addJob({ company: "Dollar Co", title: "Staff", description: "kafka" });
+    await services.pipeline.setJobComp(below.id, { low: 3_000_000, high: 4_000_000, currency: "INR", basis: "posted" });
+    await services.pipeline.setJobComp(usd.id, { low: 200_000, high: 260_000, currency: "USD", basis: "posted" });
+    await services.pipeline.startApplication(below.id);
+    await services.pipeline.startApplication(usd.id);
+
+    const state = (await (await fetch(base + "/api/state")).json()) as {
+      floor: { amount: number; currency: string };
+      pipeline: Record<string, { company: string; pay: { verdict: string; title: string } }[]>;
+    };
+    assert.deepEqual(state.floor, { amount: 6_000_000, currency: "INR", asText: "60 LPA (INR)" });
+    const cards = Object.values(state.pipeline).flat();
+    assert.equal(cards.find((c) => c.company === "Low Co")!.pay.verdict, "below");
+    // Dollars are never ranked against a rupee floor without an exchange rate.
+    assert.equal(cards.find((c) => c.company === "Dollar Co")!.pay.verdict, "unknown");
+    assert.match(cards.find((c) => c.company === "Low Co")!.pay.title, /under your floor of 60 LPA \(INR\)/);
+
+    const filtered = (await (await fetch(base + "/api/state?pay=below-floor")).json()) as {
+      pipeline: Record<string, { company: string }[]>;
+    };
+    assert.deepEqual(Object.values(filtered.pipeline).flat().map((c) => c.company), ["Low Co"]);
+  });
+});
+
+test("a job with no floor set reports no floor rather than a default one", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const job = await services.pipeline.addJob({ company: "Acme", title: "SRE", description: "Kafka" });
+    await services.pipeline.setJobComp(job.id, { low: 100_000, high: 120_000, currency: "USD", basis: "posted" });
+    await services.pipeline.startApplication(job.id);
+    const state = (await (await fetch(base + "/api/state")).json()) as {
+      floor: null;
+      pipeline: Record<string, { pay: { verdict: string } }[]>;
+    };
+    assert.equal(state.floor, null);
+    assert.equal(Object.values(state.pipeline).flat()[0]!.pay.verdict, "no-floor");
+  });
+});
+
+test("the application endpoint returns the pay figure with its source", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const job = await services.pipeline.addJob({ company: "Acme", title: "SRE", description: "Kafka" });
+    await services.pipeline.setJobComp(job.id, {
+      low: 140_000,
+      high: 210_000,
+      currency: "USD",
+      basis: "sourced",
+      sourceUrl: "https://example.com/jobs/1",
+      sourceName: "Example careers page",
+      asText: "$140K - $210K",
+    });
+    const app = await services.pipeline.startApplication(job.id);
+    const detail = (await (await fetch(base + `/api/application/${app.id}`)).json()) as {
+      pay: { label: string; basis: string; url: string; title: string };
+    };
+    assert.equal(detail.pay.label, "$140–210K");
+    assert.equal(detail.pay.basis, "sourced");
+    assert.equal(detail.pay.url, "https://example.com/jobs/1");
+    assert.match(detail.pay.title, /scraped from Example careers page/);
+  });
+});
+
+test("the pay-request button queues a request for the agent, without inventing a figure", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const job = await services.pipeline.addJob({ company: "Acme", title: "SRE", description: "Kafka" });
+    const app = await services.pipeline.startApplication(job.id);
+
+    const res = await fetch(base + "/api/pay-request", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jobId: job.id }),
+    });
+    assert.equal(res.status, 201);
+
+    // The request lands in the queue the agent polls, naming the job.
+    const feed = (await (await fetch(base + "/api/chat?since=0")).json()) as { from: string; text: string }[];
+    assert.equal(feed.length, 1);
+    assert.equal(feed[0]!.from, "user");
+    assert.match(feed[0]!.text, /Acme/);
+    assert.match(feed[0]!.text, /do not estimate/);
+
+    // Asking does not fill in a number: the card still says there is none.
+    const state = (await (await fetch(base + "/api/state")).json()) as {
+      pipeline: Record<string, { id: string; comp: null }[]>;
+    };
+    assert.equal(Object.values(state.pipeline).flat().find((c) => c.id === app.id)!.comp, null);
+
+    assert.equal(
+      (await fetch(base + "/api/pay-request", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) })).status,
+      400
+    );
+    assert.equal(
+      (await fetch(base + "/api/pay-request", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jobId: "job-nope" }) })).status,
+      404
+    );
+  });
+});
+
+test("the review UI ships the filter bar and the pay affordances", () => {
+  // A cheap guard that the controls survive edits to the embedded page.
+  for (const id of ["minScore", "pursuit", "stages", "payFilter", "sortBy", "viewReset", "floorHint"]) {
+    assert.match(UI_HTML, new RegExp(`id="${id}"`), `the view bar must keep #${id}`);
+  }
+  assert.match(UI_HTML, /\/api\/pay-request/, "the sheet must offer to ask the agent for a figure");
+  assert.match(UI_HTML, /localStorage/, "the chosen view survives a reload");
+});
+
 test("artifact endpoint renders workspace markdown and blocks path escape", async () => {
   await withServer(async ({ base, config }) => {
     const services = makeServices(config);

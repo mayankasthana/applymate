@@ -72,6 +72,114 @@ test("job add without any description errors", async () => {
   });
 });
 
+/** Add a job whose description is `text`, and return its id. */
+async function addJob(root: string, text: string): Promise<string> {
+  const add = await run(["job", "add", "--company", "Acme", "--title", "Staff Engineer", "--desc", text], root);
+  assert.equal(add.code, 0, add.stderr);
+  return add.stdout.match(/job-[a-z0-9-]+/)![0]!;
+}
+
+test("job pay reads a figure out of the posting text and shows it back", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const id = await addJob(root, "Compensation: base salary $140K - $210K per year.");
+
+    const none = await run(["job", "pay", id], root);
+    assert.match(none.stdout, /no pay figure on file/);
+
+    const extract = await run(["job", "pay", id, "--extract"], root);
+    assert.equal(extract.code, 0);
+    assert.match(extract.stdout, /\$140–210K/);
+    assert.match(extract.stdout, /stated in the posting/);
+
+    const show = await run(["job", "pay", id, "--json"], root);
+    const comp = JSON.parse(show.stdout) as { low: number; high: number; currency: string; basis: string };
+    assert.deepEqual([comp.low, comp.high, comp.currency, comp.basis], [140_000, 210_000, "USD", "posted"]);
+  });
+});
+
+test("job pay --extract records nothing when the text states no figure", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const id = await addJob(root, "We raised $50M Series B and employ 400 people across 12 offices.");
+    const res = await run(["job", "pay", id, "--extract"], root);
+    assert.equal(res.code, 1);
+    assert.match(res.stdout, /no pay figure found/i);
+    assert.match(res.stdout, /do not estimate|Nothing was recorded/);
+    const show = await run(["job", "pay", id, "--json"], root);
+    assert.equal(JSON.parse(show.stdout), null);
+  });
+});
+
+test("job pay --extract lists every band and takes the one the agent picks", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const id = await addJob(root, "Backend Engineer (India) ₹25L - ₹55L INR. Other jobs at Acme: SDR $60K - $65K.");
+    const res = await run(["job", "pay", id, "--extract"], root);
+    assert.equal(res.code, 0);
+    assert.match(res.stdout, /2 pay bands/);
+    assert.match(res.stdout, /₹25–55L/);
+
+    const second = await run(["job", "pay", id, "--extract", "--pick", "2"], root);
+    assert.equal(second.code, 0);
+    const show = await run(["job", "pay", id, "--json"], root);
+    assert.equal((JSON.parse(show.stdout) as { currency: string }).currency, "USD");
+
+    const bad = await run(["job", "pay", id, "--extract", "--pick", "9"], root);
+    assert.equal(bad.code, 1);
+    assert.match(bad.stderr, /out of range/);
+  });
+});
+
+test("a figure typed by hand must name the source it was read from", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const id = await addJob(root, "Kafka, Go.");
+
+    const noSource = await run(["job", "pay", id, "--low", "200000", "--high", "260000", "--currency", "USD"], root);
+    assert.equal(noSource.code, 1);
+    assert.match(noSource.stderr, /--source is required/);
+
+    const ok = await run(
+      ["job", "pay", id, "--low", "200000", "--high", "260000", "--currency", "USD",
+       "--source", "https://example.com/jobs/1", "--source-name", "Example careers page"],
+      root
+    );
+    assert.equal(ok.code, 0, ok.stderr);
+    assert.match(ok.stdout, /\$200–260K/);
+
+    const noCurrency = await run(
+      ["job", "pay", id, "--low", "200000", "--high", "260000", "--currency", "dollars", "--source", "https://example.com/1"],
+      root
+    );
+    assert.equal(noCurrency.code, 1);
+  });
+});
+
+test("job pay --clear removes the figure and the card falls back to none", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const id = await addJob(root, "base salary $140K - $210K");
+    await run(["job", "pay", id, "--extract"], root);
+    const clear = await run(["job", "pay", id, "--clear"], root);
+    assert.equal(clear.code, 0);
+    assert.match(clear.stdout, /cleared/);
+    assert.equal(JSON.parse((await run(["job", "pay", id, "--json"], root)).stdout), null);
+  });
+});
+
+test("job pay --extract reads a saved page snapshot with --file", async () => {
+  await withTmpDir(async (root) => {
+    await run(["init"], root);
+    const id = await addJob(root, "The range is listed on the page, not in this text.");
+    const page = join(root, "page.html");
+    await writeFile(page, "<html><body>Pay transparency: base salary €93,280.00 - €139,920.00 per year</body></html>");
+    const res = await run(["job", "pay", id, "--extract", "--file", page], root);
+    assert.equal(res.code, 0, res.stderr);
+    assert.match(res.stdout, /€93\.3–139\.9K/);
+  });
+});
+
 test("job match scores against the dossier and gates app start", async () => {
   await withTmpDir(async (root) => {
     await run(["init"], root);

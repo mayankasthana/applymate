@@ -9,7 +9,8 @@ import { renderDocument, escapeHtml } from "./services/markdown.ts";
 import { loadDossierIndex } from "./services/dossier.ts";
 import { scoreMatch } from "./services/matcher.ts";
 import { withState } from "./services/outreach.ts";
-import { filterBoard } from "./services/board-search.ts";
+import { countBoard, parseBoardView, viewBoard } from "./services/board-view.ts";
+import { parseFloor, payDisplay } from "./services/comp.ts";
 
 const MAX_BODY_BYTES = 1_000_000;
 const RENDERABLE = /\.(md|markdown|txt)$/i;
@@ -70,9 +71,25 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
       services.outreach.list({ due: true }),
     ]);
     const now = Date.now();
+    // The candidate's own floor decides what "below" means; a missing or
+    // unreadable one disables the comparison rather than inventing a number.
+    const floor = parseFloor(prefs.find((p) => p.key === "salaryfloor")?.value);
+    const view = { ...parseBoardView(url.searchParams), floor };
+    const shown = viewBoard(pipeline, view);
+    // Pay display is computed here, once: the review UI is a static page and
+    // cannot share this module, so it renders what the server already decided.
+    const decorated = Object.fromEntries(
+      Object.entries(shown).map(([status, cards]) => [
+        status,
+        cards.map((card) => ({ ...card, pay: payDisplay(card.comp, floor) })),
+      ])
+    ) as unknown as typeof shown;
     return sendJson(res, 200, {
-      // the board search box: ?q= filters cards (req id, company, free terms)
-      pipeline: filterBoard(pipeline, url.searchParams.get("q")),
+      // the board as asked for: ?q= free text, &minScore= &pursuit= &status=
+      // &pay= filter it, &sort= orders the cards inside each lane
+      pipeline: decorated,
+      board: { total: countBoard(pipeline), shown: countBoard(shown), sort: view.sort ?? "recent", minScore: view.minScore ?? 0 },
+      floor,
       preferences: prefs,
       missingPreferences: missing,
       outreach: outreach.map((m) => withState(m)),
@@ -125,14 +142,44 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
     return sendJson(res, 200, { id: moved.id, status: moved.status });
   }
 
+  if (method === "POST" && path === "/api/pay-request") {
+    // The "no pay figure on file" button on a card: the candidate asks Aja to
+    // go and read the number off a source, which the agent then records with
+    // `job pay`. The UI never scrapes anything itself, and nothing here fills
+    // in a number on the candidate's behalf.
+    const body = await readJson(req);
+    const jobId = String(body.jobId ?? "");
+    if (!jobId) return sendJson(res, 400, { error: "jobId is required" });
+    const job = await services.pipeline.getJob(jobId).catch(() => null);
+    if (!job) return sendJson(res, 404, { error: `no job ${jobId}` });
+    const record = await services.chat.append({
+      from: "user",
+      text:
+        `Pull the pay figure for ${job.company} — ${job.title} (${job.id}). ` +
+        `Look for a range on the company's own posting page first, then a public comp source. ` +
+        `Record it with \`job pay ${job.id} --low/--high/--currency/--source\`, or \`--extract\` if the ` +
+        `page states it. If you cannot find one, say so — do not estimate.`,
+    });
+    return sendJson(res, 201, record);
+  }
+
   const appMatch = path.match(/^\/api\/application\/([a-z0-9._-]+)$/i);
   if (method === "GET" && appMatch) {
     const app = await services.pipeline.getApplication(appMatch[1]!);
-    const [job, outreach] = await Promise.all([
+    const [job, outreach, prefs] = await Promise.all([
       services.pipeline.getJob(app.jobId).catch(() => null),
       services.outreach.list({ appId: app.id, all: true }),
+      services.profile.preferences(),
     ]);
-    return sendJson(res, 200, { ...app, job, outreach: outreach.map((m) => withState(m)) });
+    const floor = parseFloor(prefs.find((p) => p.key === "salaryfloor")?.value);
+    return sendJson(res, 200, {
+      ...app,
+      job,
+      // Formatted on the server, so the sheet and the board cards agree.
+      pay: payDisplay(job?.comp ?? null, floor),
+      floor,
+      outreach: outreach.map((m) => withState(m)),
+    });
   }
 
   if (method === "GET" && path === "/api/artifact") {

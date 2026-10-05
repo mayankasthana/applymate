@@ -1,7 +1,9 @@
 import {
   Application,
   Job,
+  normalizeCompensation,
   type Application as ApplicationRecord,
+  type Compensation,
   type Job as JobRecord,
   type JobInput,
   type Pursuit,
@@ -62,6 +64,9 @@ export interface AppSummary {
    *  decision being made. */
   lastMovedAt: string;
   jobUrl: string | null;
+  location: string | null;
+  /** The pay figure on file for this role, or null when there is none. */
+  comp: Compensation | null;
 }
 
 /**
@@ -113,6 +118,24 @@ export class PipelineService {
     if (!Number.isFinite(score)) throw new Error(`match score must be a number, got: ${score}`);
     const job = await this.jobs.get(jobId);
     return this.jobs.put({ ...job, matchScore: Math.round(score), matchReportPath: reportPath, matchedAt: at });
+  }
+
+  /**
+   * Record the pay figure for a job, or clear it with null. A figure that
+   * fails validation (no currency, an inverted range, a scraped figure with no
+   * source URL) is refused: the board must never show a number nobody sourced.
+   */
+  async setJobComp(jobId: string, comp: unknown): Promise<JobRecord> {
+    const job = await this.jobs.get(jobId);
+    if (comp === null) return this.jobs.put({ ...job, comp: null });
+    const valid = normalizeCompensation(comp);
+    if (!valid) {
+      throw new Error(
+        `pay figure rejected: needs a low/high in major units, an ISO currency (USD/INR/...), ` +
+          `and a --source URL when the figure was scraped rather than stated by the posting`
+      );
+    }
+    return this.jobs.put({ ...job, comp: valid });
   }
 
   // -- Applications -----------------------------------------------------------
@@ -253,6 +276,8 @@ async attachArtifact(id: string, kind: "resume" | "coverLetter" | "notes", relPa
         updatedAt: app.updatedAt,
         lastMovedAt: app.history.length ? app.history[app.history.length - 1]!.at : app.createdAt,
         jobUrl: job?.url ?? null,
+        location: job?.location ?? null,
+        comp: job?.comp ?? null,
       });
     }
     for (const status of Object.keys(board) as Status[]) {

@@ -18,6 +18,8 @@ function card(overrides: Partial<AppSummary>): AppSummary {
     updatedAt: "2026-09-30T00:00:00.000Z",
     lastMovedAt: "2026-09-30T00:00:00.000Z",
     jobUrl: null,
+    location: null,
+    comp: null,
     ...overrides,
   };
 }
