@@ -54,7 +54,7 @@ export const UI_HTML = `<!doctype html>
   /* ---------- shell ---------- */
   .shell {
     display:grid; grid-template-columns: 64px minmax(0,1fr) 360px;
-    height: calc(100vh - 44px);
+    height: calc(100vh - 44px - 37px);
   }
   @media (max-width: 1100px) {
     .shell { grid-template-columns: 56px minmax(0,1fr) 300px; }
@@ -100,6 +100,29 @@ export const UI_HTML = `<!doctype html>
     height:44px; display:flex; align-items:center; gap:.8rem;
     padding:0 .9rem; background:var(--surface); border-bottom:1px solid var(--line);
   }
+
+  /* ---------- view bar (filters + sorting) ---------- */
+  .viewbar {
+    display:flex; align-items:center; gap:.7rem; flex-wrap:wrap;
+    padding:.4rem .9rem; background:var(--surface); border-bottom:1px solid var(--line);
+  }
+  .viewbar label { display:flex; align-items:center; gap:.35rem; font:10px/1 var(--mono);
+    text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  .viewbar select {
+    background:var(--canvas); border:1px solid var(--line); color:var(--ink);
+    border-radius:6px; padding:5px 7px; font-size:12px; outline:none; max-width:170px;
+  }
+  .viewbar select:focus { border-color:var(--amber); }
+  .viewbar input[type=range] { width:110px; accent-color:var(--amber); }
+  .viewbar .scoreval { font:12px/1 var(--mono); color:var(--ink); min-width:2.2rem; }
+  .viewbar .floorhint { font:11px/1.3 var(--sans); color:var(--dim); }
+  .viewbar .reset {
+    background:none; border:1px solid var(--line); color:var(--muted);
+    border-radius:6px; cursor:pointer; padding:5px 8px; font-size:11px;
+  }
+  .viewbar .reset:hover { color:var(--ink); border-color:var(--amber); }
+  .viewbar .spacer { flex:1; }
+  @media (max-width: 900px) { .viewbar { gap:.45rem; } .viewbar .floorhint { display:none; } }
   .topbar .who { font-weight:600; font-size:13px; }
   .topbar .where { color:var(--dim); font-size:12px; }
   .topbar .stat {
@@ -197,6 +220,10 @@ export const UI_HTML = `<!doctype html>
   .pill.pursuit.green { color:var(--emerald); border-color:rgba(16,185,129,.4); background:rgba(16,185,129,.1); }
   .pill.pursuit.amber { color:var(--amber-hi); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.1); }
   .pill.pursuit.red { color:var(--rose); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.1); }
+  .pill.pay { color:var(--ink); border-color:rgba(139,148,158,.45); background:rgba(139,148,158,.12); }
+  .pill.pay.sourced { color:var(--amber-hi); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.1); }
+  .pill.pay.none { color:var(--dim); border-style:dashed; }
+  .pill.pay.below { color:var(--rose); border-color:rgba(239,68,68,.45); background:rgba(239,68,68,.1); }
   .req { font:10px/1 var(--mono); color:var(--amber-hi); text-decoration:none;
     border:1px solid var(--line); border-radius:4px; padding:.28rem .4rem; }
   .req:hover { border-color:var(--amber); }
@@ -325,6 +352,52 @@ export const UI_HTML = `<!doctype html>
   </div>
 </header>
 
+<div class="viewbar" role="group" aria-label="Filter and sort the board">
+  <label>min score
+    <input type="range" id="minScore" min="0" max="100" step="5" value="0"
+      aria-label="Hide cards scoring below this">
+    <span class="scoreval" id="minScoreVal">any</span>
+  </label>
+  <label>verdict
+    <select id="pursuit" aria-label="Filter by pursuit verdict">
+      <option value="">any</option>
+      <option value="green">green — push</option>
+      <option value="amber">amber — referral only</option>
+      <option value="red">red — skip</option>
+      <option value="none">no verdict yet</option>
+    </select>
+  </label>
+  <label>stage
+    <select id="stages" aria-label="Which stages to show">
+      <option value="">all stages</option>
+      <option value="discovered,matched,tailoring,ready">backlog — not sent</option>
+      <option value="discovered,matched,tailoring,ready,submitted">in flight</option>
+      <option value="submitted,interviewing,offer">sent — waiting on them</option>
+      <option value="interviewing,offer">interviewing or offer</option>
+      <option value="closed,rejected">closed and rejected</option>
+    </select>
+  </label>
+  <label>pay
+    <select id="payFilter" aria-label="Filter by pay figure">
+      <option value="">any</option>
+      <option value="with">has a figure</option>
+      <option value="without">no figure on file</option>
+      <option value="below-floor">below my floor</option>
+    </select>
+  </label>
+  <label>sort
+    <select id="sortBy" aria-label="Order cards inside each lane">
+      <option value="recent">most recent first</option>
+      <option value="score">highest match first</option>
+      <option value="company">company A–Z</option>
+      <option value="pay">highest pay first</option>
+    </select>
+  </label>
+  <button class="reset" id="viewReset" title="Clear every filter and go back to the default order">reset</button>
+  <span class="spacer"></span>
+  <span class="floorhint" id="floorHint"></span>
+</div>
+
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="mark" aria-hidden="true">A</div>
@@ -449,18 +522,79 @@ function refBadge(appId){
   return '<span class="pill" title="no outreach logged for this application yet">no ref</span>';
 }
 
+// The pay pill. A figure is only ever shown when one was recorded from a real
+// source (the server formats and compares it, so this page cannot drift from
+// the CLI); "no pay figure on file" is a deliberate state — never a guess, and
+// never the candidate's floor standing in for the posting's own number.
+function payPill(a){
+  const p = a.pay || { label: "no pay figure", title: "no pay figure on file", verdict: "none", basis: null };
+  const cls = p.verdict === "below" ? "below" : p.basis ? "sourced" : "none";
+  const tag = p.basis ? (p.basis === "posted" ? "posted" : p.basis === "stated" ? "stated" : "sourced") : "";
+  return '<span class="pill pay ' + cls + '" title="' + esc(p.title) + '">' +
+    esc(p.label) + (tag ? " " + tag : "") + "</span>";
+}
+
 function discardBtn(a){
   if (!DISCARDABLE.includes(a.status)) return "";
   return '<button class="discard" data-id="' + esc(a.id) + '" title="not interested — moves this role to Closed" onclick="event.stopPropagation()">✕</button>';
 }
 
-// The board filter: what's typed in the search box. Applied server-side via
-// /api/state?q= so the 10s auto-refresh keeps the filter active.
-let boardQuery = "";
+// The board as the candidate asked to see it. Filters and sort live here and in
+// localStorage, so the 10s auto-refresh keeps the view and a reload keeps it
+// too. Every value maps to a /api/state parameter — the server does the work.
+const STAGE_PRESETS = {
+  "": null,
+  "discovered,matched,tailoring,ready": "discovered,matched,tailoring,ready",
+  "discovered,matched,tailoring,ready,submitted": "discovered,matched,tailoring,ready,submitted",
+  "submitted,interviewing,offer": "submitted,interviewing,offer",
+  "interviewing,offer": "interviewing,offer",
+  "closed,rejected": "closed,rejected",
+};
+
+const DEFAULT_VIEW = { q: "", minScore: 0, pursuit: "", stages: "", pay: "", sort: "recent" };
+
+function loadView() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("boardView") || "{}");
+    return Object.assign({}, DEFAULT_VIEW, saved);
+  } catch {
+    return Object.assign({}, DEFAULT_VIEW);
+  }
+}
+
+let view = loadView();
+
+function viewParams() {
+  const p = new URLSearchParams();
+  if (view.q) p.set("q", view.q);
+  if (view.minScore > 0) p.set("minScore", String(view.minScore));
+  if (view.pursuit) p.set("pursuit", view.pursuit);
+  const stages = STAGE_PRESETS[view.stages];
+  if (stages) p.set("status", stages);
+  if (view.pay) p.set("pay", view.pay);
+  if (view.sort && view.sort !== "recent") p.set("sort", view.sort);
+  const s = p.toString();
+  return s ? "?" + s : "";
+}
+
+function applyView() {
+  try { localStorage.setItem("boardView", JSON.stringify(view)); } catch {}
+  $("#boardSearch").value = view.q;
+  $("#minScore").value = String(view.minScore);
+  $("#minScoreVal").textContent = view.minScore > 0 ? view.minScore + "+" : "any";
+  $("#pursuit").value = view.pursuit;
+  $("#stages").value = view.stages;
+  $("#payFilter").value = view.pay;
+  $("#sortBy").value = view.sort;
+  $("#boardSearchClear").style.display = view.q ? "" : "none";
+}
 
 // Guards against out-of-order renders: a slow unfiltered fetch (initial load,
 // auto-refresh tick) must never overwrite a newer filtered one.
 let boardFetch = 0;
+
+// The candidate's own floor, as the server read it (null when unset/unreadable).
+let floorInfo = null;
 
 // Board-wide tally for the topbar. Never derived from a filtered fetch — a
 // filter narrows the board, it does not shrink the board.
@@ -593,7 +727,7 @@ function matchGrade(score){
 
 async function refreshBoard(){
   const me = ++boardFetch;
-  const state = await jget("/api/state" + (boardQuery ? "?q=" + encodeURIComponent(boardQuery) : ""));
+  const state = await jget("/api/state" + viewParams());
   if (me !== boardFetch) return;
   outreachByApp = {};
   for (const m of (state.outreach||[])) {
@@ -601,6 +735,10 @@ async function refreshBoard(){
     (outreachByApp[m.appId] = outreachByApp[m.appId] || []).push(m);
   }
   renderTriage(state.actions || {});
+  floorInfo = state.floor || null;
+  $("#floorHint").textContent = floorInfo
+    ? "your floor: " + floorInfo.asText
+    : "set a salary floor (prefs salaryFloor) and every figure gets compared to it";
 
   const board = state.pipeline || {};
   let total = 0;
@@ -617,19 +755,23 @@ async function refreshBoard(){
             (a.jobUrl ? ' <a class="req" target="_blank" rel="noopener" href="' + esc(a.jobUrl) +
               '" onclick="event.stopPropagation()" title="open the requisition page">req ↗</a>' : "") +
           "</div>" +
-          '<div class="tags">' + refBadge(a.id) + "</div>" +
+          '<div class="tags">' + payPill(a) + refBadge(a.id) + "</div>" +
         "</div>"
       ).join("") + "</div></div>";
   }).join("");
 
-  $("#board").innerHTML = html || (boardQuery
-    ? '<div class="empty">no cards match "' + esc(boardQuery) + '" — clear the filter to see the whole board</div>'
+  const filtered = view.q || view.minScore || view.pursuit || view.stages || view.pay;
+  $("#board").innerHTML = html || (filtered
+    ? '<div class="empty">no cards match this view — press reset to see the whole board</div>'
     : '<div class="empty">no applications yet — ask Aja to find jobs</div>');
-  $("#boardCount").textContent = total ? total + " application" + (total === 1 ? "" : "s") : "";
+  const meta = state.board || {};
+  $("#boardCount").textContent = total
+    ? (filtered ? total + " of " + (meta.total ?? total) + " shown" : total + " application" + (total === 1 ? "" : "s"))
+    : "";
   // The topbar tally is about the board, not the view, so a board filter must
   // not shrink it. Only an unfiltered fetch can update it; while filtering we
   // keep the last full-board numbers rather than issue a second request a tick.
-  if (!boardQuery){
+  if (!filtered){
     boardTotals = {
       active: (board.discovered||[]).length + (board.matched||[]).length + (board.tailoring||[]).length,
       interviewing: (board.interviewing||[]).length + (board.offer||[]).length,
@@ -640,7 +782,7 @@ async function refreshBoard(){
       "</b> active · <b>" + boardTotals.interviewing + "</b> interviewing";
   }
 
-  $("#boardSearchClear").style.display = boardQuery ? "" : "none";
+  $("#boardSearchClear").style.display = view.q ? "" : "none";
   $("#board").querySelectorAll("button.discard").forEach((b) => b.addEventListener("click", async () => {
     if (!confirm("Discard this role? The card moves to Closed (a fresh application can be opened later for the same job).")) return;
     await jpost("/api/discard", { id: b.dataset.id });
@@ -651,18 +793,39 @@ async function refreshBoard(){
 // Typing filters live (debounced); the box lives outside #board so the
 // auto-refresh never steals focus mid-search.
 let searchTimer = null;
-$("#boardSearch").addEventListener("input", (e) => {
-  boardQuery = e.target.value.trim();
+function refreshSoon() {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(refreshBoard, 150);
+}
+$("#boardSearch").addEventListener("input", (e) => {
+  view.q = e.target.value.trim();
+  refreshSoon();
 });
 $("#boardSearchClear").addEventListener("click", () => {
-  $("#boardSearch").value = "";
-  boardQuery = "";
-  clearTimeout(searchTimer);
+  view.q = "";
+  applyView();
   refreshBoard();
   $("#boardSearch").focus();
 });
+
+$("#minScore").addEventListener("input", (e) => {
+  view.minScore = Number(e.target.value);
+  $("#minScoreVal").textContent = view.minScore > 0 ? view.minScore + "+" : "any";
+  refreshSoon();
+});
+for (const [id, key] of [["#pursuit", "pursuit"], ["#stages", "stages"], ["#payFilter", "pay"], ["#sortBy", "sort"]]) {
+  $(id).addEventListener("change", (e) => {
+    view[key] = e.target.value;
+    applyView();
+    refreshBoard();
+  });
+}
+$("#viewReset").addEventListener("click", () => {
+  view = Object.assign({}, DEFAULT_VIEW);
+  applyView();
+  refreshBoard();
+});
+applyView();
 
 // 1-9 focus a needs-you card. It opens the application for review — it never
 // acts. Nothing on this surface may send, submit, or discard without a click
@@ -708,6 +871,15 @@ async function openApp(id){
         (m.note ? " — " + esc(m.note) : "") + "</li>"
       ).join("") + "</ul>"
     : '<p class="empty">no outreach or referral logged for this application yet</p>';
+  const state = await jget("/api/state");
+  floorInfo = state.floor || null;
+  const pay = app.pay || null;
+  const payHtml = pay && pay.basis
+    ? esc(pay.label) + ' <span class="pill pay ' + (pay.basis === "sourced" ? "sourced" : "") + '">' +
+        esc(pay.basis) + '</span><br><span style="color:var(--muted)">' + esc(pay.title) + "</span>" +
+        (pay.url ? '<br><a target="_blank" rel="noopener" href="' + esc(pay.url) + '">open the source ↗</a>' : "")
+    : "nothing on file yet — <button class=\\"applink\\" onclick=\\"askPay(\\'" + esc(job.id || "") + "')\\">ask Aja to pull it</button>" +
+      '<br><span style="color:var(--muted)">Aja reads the range off the company\\\'s posting page or a public comp source and records where it came from. Nothing is estimated.</span>';
   $("#sheetBody").innerHTML =
     "<h3>" + esc(job.company||"?") + " — " + esc(job.title||"?") + "</h3>" +
     '<dl class="meta">' +
@@ -717,6 +889,8 @@ async function openApp(id){
         ? pursuitBadge(app.pursuit).replace('class="pill pursuit', 'class="pill pursuit" style="display:inline-flex"') +
           (app.pursuit.note ? " — " + esc(app.pursuit.note) : "")
         : "not assessed") + "</dd>" +
+      "<dt>pay</dt><dd>" + payHtml + "</dd>" +
+      "<dt>location</dt><dd>" + esc(job.location || "-") + "</dd>" +
       "<dt>posting</dt><dd>" + (job.url
         ? '<a target="_blank" rel="noopener" href="' + esc(job.url) + '">open requisition ↗</a>'
         : "-") + "</dd>" +
@@ -732,6 +906,20 @@ async function openApp(id){
     (arts ? "<h4>Artifacts</h4>" + arts : '<p class="empty">no artifacts yet</p>') +
     "<h4>Job description</h4><pre>" + esc(job.description||"") + "</pre>";
   $("#overlay").classList.add("open");
+}
+
+// The "ask Aja to pull it" button posts the candidate's request into the same
+// chat queue Aja polls, so scraping happens in the browser at human pace
+// instead of the dashboard reaching out to the internet on its own.
+async function askPay(jobId){
+  if (!jobId) return;
+  const sent = await jpost("/api/pay-request", { jobId });
+  closeSheet();
+  if (sent && sent.id) {
+    const log = $("#chatlog");
+    log.appendChild(bubble(sent));
+    log.scrollTop = log.scrollHeight;
+  }
 }
 async function rescore(jobId){
   if (!jobId) return;

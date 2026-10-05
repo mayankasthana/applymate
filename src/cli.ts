@@ -14,7 +14,9 @@ import { checkRigServices, DEFAULT_RIG_ENDPOINTS } from "./services/rig.ts";
 import { outreachState, withState, referralCounts } from "./services/outreach.ts";
 import { buildLearnReport, renderLearnText } from "./services/learn.ts";
 import { daysSince, isStale, DEFAULT_STALE_DAYS, type AppSummary } from "./services/pipeline.ts";
+import { describeComp, formatCompensation, normalizeComp, parseCompensations, recordFromCandidate } from "./services/comp.ts";
 import { reminderState } from "./services/reminders.ts";
+import { errorsIn, type LintReport } from "./services/resume-lint.ts";
 import { followUpDueAt } from "./domain.ts";
 import { type Job, type Evidence } from "./domain.ts";
 
@@ -255,6 +257,100 @@ async function cmdJobMatch({ pos, flags, io, rootDir }: CommandContext): Promise
   return 0;
 }
 
+/**
+ * The pay figure on a job record. Figures are always sourced: either read out
+ * of the posting text (`--extract`, optionally from a saved page snapshot) or
+ * typed in with the URL they were read from. Nothing here ever estimates a
+ * number nobody wrote down.
+ */
+async function cmdJobPay({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const usage =
+    "job pay <jobId> [--extract [--file page.html]] | [--low N --high M --currency USD --source URL " +
+    "[--source-name name] [--period year|month|hour] [--note text]] | [--clear]";
+  const [id] = pos;
+  if (!id) return failWith(io, usage, "missing job id");
+  const { pipeline } = await services(rootDir);
+  const job = await pipeline.getJob(id).catch(() => null);
+  if (!job) return failWith(io, usage, `no job ${id}`);
+
+  if (flags.clear) {
+    const cleared = await pipeline.setJobComp(id, null);
+    if (flags.json) return jsonOut(io, cleared);
+    line(io, `cleared the pay figure on ${id} — the card falls back to "no figure on file"`);
+    return 0;
+  }
+
+  if (flags.extract) {
+    const text = flags.file ? await readFile(String(flags.file), "utf8") : job.description;
+    const candidates = parseCompensations(text);
+    if (!candidates.length) {
+      // Say so plainly instead of writing a number nothing supports.
+      line(
+        io,
+        `no pay figure found in ${flags.file ? String(flags.file) : `the posting text for ${id}`}.\n` +
+          "Nothing was recorded. If the range is on the page, save the page (--file) or type it in " +
+          "with --low/--high/--currency/--source."
+      );
+      return 1;
+    }
+    const pick = Number(flags.pick ?? 1);
+    const chosen = candidates[pick - 1];
+    if (!chosen) return failWith(io, usage, `--pick ${pick} is out of range (${candidates.length} found)`);
+    const record = recordFromCandidate(chosen, { basis: "posted", note: flags.note ? String(flags.note) : null });
+    if (!record) return failWith(io, usage, `could not record "${chosen.asText}"`);
+    const saved = await pipeline.setJobComp(id, record);
+    if (flags.json) return jsonOut(io, { job: saved, candidates });
+    if (candidates.length > 1) {
+      line(io, `this text states ${candidates.length} pay bands — recorded #${pick}; re-run with --pick if it is the wrong one:`);
+      candidates.forEach((c, i) => line(io, `  ${i + 1}. ${c.asText}  (${c.currency}/${c.period})`));
+    }
+    line(io, `${id}: ${formatCompensation(record)} — stated in the posting ("${record.asText}")`);
+    return 0;
+  }
+
+  if (flags.low || flags.high) {
+    const stated = Boolean(flags.stated);
+    const source = flags.source ? String(flags.source) : null;
+    const sourceName = flags["source-name"] ? String(flags["source-name"]) : null;
+    // --stated is for a figure a PERSON gave you (a recruiter anchoring a band on
+    // a call); it has no URL, so it is named instead. Everything else must cite one.
+    if (stated && !sourceName) {
+      return failWith(io, usage, "--stated requires --source-name: name who told you the figure");
+    }
+    if (!stated && !source) {
+      return failWith(io, usage, "--source is required: a figure typed in by hand has to name where it was read");
+    }
+    const period = flags.period ? String(flags.period) : "year";
+    const record = normalizeComp({
+      low: flags.low,
+      high: flags.high ?? flags.low,
+      currency: flags.currency,
+      period,
+      basis: stated ? "stated" : "sourced",
+      sourceUrl: stated ? null : source,
+      sourceName,
+      note: flags.note ? String(flags.note) : null,
+      asText: flags["as-text"] ? String(flags["as-text"]) : null,
+    });
+    if (!record) {
+      return failWith(io, usage, "needs --low/--high in major units and an ISO --currency (USD, INR, EUR, ...)");
+    }
+    const saved = await pipeline.setJobComp(id, record);
+    if (flags.json) return jsonOut(io, saved);
+    line(io, `${id}: ${formatCompensation(record)} — ${stated ? `stated by ${record.sourceName}` : `scraped from ${record.sourceName ?? source}`}`);
+    return 0;
+  }
+
+  if (flags.json) return jsonOut(io, job.comp);
+  if (!job.comp) {
+    line(io, `${id} has no pay figure on file — try: job pay ${id} --extract`);
+    return 0;
+  }
+  line(io, `${job.company} — ${job.title}`);
+  line(io, `${formatCompensation(job.comp)}  ${describeComp(job.comp)}`);
+  return 0;
+}
+
 async function cmdJobEvidence({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
   const [id, file] = pos;
   if (!id || !file) return failWith(io, "job evidence <jobId> <file> --kind jd-screenshot [--url u] [--note n] [--at iso]", "need <jobId> and <file>");
@@ -328,11 +424,80 @@ async function cmdAppShow({ pos, flags, io, rootDir }: CommandContext): Promise<
   return 0;
 }
 
+/**
+ * Rendered for both `resume check` and the pre-portal gate so the wording a
+ * candidate reads at the gate is the same one `docs/scripts.md` documents.
+ */
+function renderLint(io: Io, report: LintReport, out: Io["stdout"] = io.stdout): void {
+  const errors = errorsIn(report);
+  const warns = report.findings.filter((f) => f.severity === "warn");
+  for (const f of report.findings) {
+    const tag = f.severity === "error" ? "error" : "warn ";
+    out.write(`  ${tag}  ${f.rule}: ${f.message}\n`);
+    out.write(`        ${f.hint}\n`);
+  }
+  out.write(`${report.appId}${report.company ? ` (${report.company})` : ""}: ${errors.length} error(s), ${warns.length} warning(s)\n`);
+}
+
+/**
+ * The last gate before a resume can leave the machine. `ready` is the state a
+ * portal upload follows and `submitted` is recorded after the fact, so this is
+ * the only transition where blocking still prevents a bad file from being sent.
+ */
+async function gateResume(io: Io, svc: Services, appId: string, flags: Record<string, string | boolean>): Promise<number | null> {
+  const report = await svc.resumeLint.check(appId);
+  const errors = errorsIn(report);
+  if (!errors.length) return null;
+  if (flags.force) {
+    io.stderr.write(`warning: proceeding with ${errors.length} resume lint error(s) (--force)\n`);
+    for (const f of errors) io.stderr.write(`  ${f.rule}: ${f.message}\n`);
+    return null;
+  }
+  io.stderr.write(`blocked: ${errors.length} resume lint error(s) on ${appId}\n`);
+  renderLint(io, report, io.stderr);
+  io.stderr.write("\nfix these, or re-run with --force if a finding is wrong.\n");
+  return 1;
+}
+
+async function cmdResumeCheck({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
+  const svc = await services(rootDir);
+  if (flags.all) {
+    const reports = (await svc.resumeLint.checkAll()).filter((r) => r.findings.length > 0);
+    if (flags.json) return jsonOut(io, reports);
+    if (!reports.length) {
+      line(io, "all applications pass");
+      return 0;
+    }
+    for (const r of reports) {
+      renderLint(io, r);
+      line(io);
+    }
+    const total = reports.reduce((n, r) => n + errorsIn(r).length, 0);
+    line(io, `${reports.length} application(s) with findings, ${total} error(s)`);
+    return total ? 1 : 0;
+  }
+
+  const [id] = pos;
+  if (!id) return failWith(io, "resume check <appId> | --all", "need <appId> or --all");
+  const report = await svc.resumeLint.check(id);
+  if (flags.json) return jsonOut(io, report);
+  if (!report.findings.length) {
+    line(io, `${id}: clean`);
+    return 0;
+  }
+  renderLint(io, report);
+  return errorsIn(report).length ? 1 : 0;
+}
+
 async function cmdAppMove({ pos, flags, io, rootDir }: CommandContext): Promise<number> {
   const [id, to] = pos;
-  if (!id || !to) return failWith(io, "app move <appId> <status> [--note text]", "need <appId> and <status>");
-  const { pipeline } = await services(rootDir);
-  const app = await pipeline.move(id, to as never, { note: flags.note ? String(flags.note) : null });
+  if (!id || !to) return failWith(io, "app move <appId> <status> [--note text] [--force]", "need <appId> and <status>");
+  const svc = await services(rootDir);
+  if (to === "ready" || to === "submitted") {
+    const blocked = await gateResume(io, svc, id, flags);
+    if (blocked !== null) return blocked;
+  }
+  const app = await svc.pipeline.move(id, to as never, { note: flags.note ? String(flags.note) : null });
   if (flags.json) return jsonOut(io, app);
   line(io, `${app.id}: ${app.history.at(-1)!.from} -> ${app.status}`);
   return 0;
@@ -914,17 +1079,24 @@ function printHelp(io: Io, code = 0): number {
       "pipeline:",
       "  job add --company C --title T [--url U] [--file jd.md | --desc text]",
       "  job evidence <jobId> <file> --kind jd-screenshot [--url U]",
+      "  job pay <jobId>                  show the pay figure on file (or say there is none)",
+      "  job pay <jobId> --extract        read the figure out of the posting text [--file page.html] [--pick n]",
+      "  job pay <jobId> --low N --high M --currency USD --source URL",
+      "                                  record a figure scraped from a source page (--source required)",
+      "  job pay <jobId> --clear          remove the figure",
       "  job list | job show <id>",
       "  job match <jobId>               score JD vs dossier (relevance gate)",
       "  app start <jobId> [--resume p] [--force]",
       "  app list [--status s] | app show <id>",
       "  app move <id> <status> [--note n]",
-      "  app artifact <id> <kind> <path>",
-      "  app evidence <appId> <file> --kind submit-screenshot",
+  "  app artifact <id> <kind> <path>",
+  "  app evidence <appId> <file> --kind submit-screenshot",
   "  app submitted <appId> [--portal p] [--confirmation c]",
   "  app match <appId>               score + attach report to application",
   "  app pursuit <appId> <green|amber|red> [--note n]",
   "                                  record the conversion-odds verdict (dashboard badge)",
+  "  resume check <appId> | --all     lint the resume before it reaches a portal",
+  "                                  (also gates `app move ready|submitted`; --force overrides)",
       "  pipeline                        kanban view of all applications",
       "  learn [--sample n] [--limit n]  advisory calibration from your own verdicts",
       "                                  and outcomes (never changes anything by itself)",
@@ -986,6 +1158,7 @@ const COMMANDS: Command[] = [
   { name: "job list", summary: "list jobs", run: cmdJobList },
   { name: "job show", summary: "show a job", run: cmdJobShow },
   { name: "job evidence", summary: "attach a capture (screenshot/snapshot)", run: cmdJobEvidence },
+  { name: "job pay", summary: "record/show/clear the sourced pay figure for a job", run: cmdJobPay },
   { name: "job match", summary: "score job vs dossier", run: cmdJobMatch },
   { name: "app start", summary: "open an application", run: cmdAppStart },
   { name: "app list", summary: "list applications", run: cmdAppList },
@@ -994,7 +1167,8 @@ const COMMANDS: Command[] = [
   { name: "app artifact", summary: "attach artifact", run: cmdAppArtifact },
   { name: "app evidence", summary: "attach a capture (screenshot/confirmation)", run: cmdAppEvidence },
   { name: "app submitted", summary: "record submission time/portal/confirmation", run: cmdAppSubmitted },
-  { name: "app match", summary: "score + attach report", run: cmdAppMatch },
+    { name: "app match", summary: "score + attach report", run: cmdAppMatch },
+  { name: "resume check", summary: "lint a resume before it goes to a portal", run: cmdResumeCheck },
   { name: "app pursuit", summary: "record conversion-odds verdict (green/amber/red)", run: cmdAppPursuit },
   { name: "learn", summary: "advisory calibration report from your own verdicts/outcomes", run: cmdLearn },
   { name: "profile note", summary: "candidate-owned documents (resume standards, open-source list)", run: cmdProfileNote },

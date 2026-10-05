@@ -13,6 +13,91 @@ export class DomainError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Compensation (a sourced pay figure for a listing — never a modelled one)
+// ---------------------------------------------------------------------------
+
+/**
+ * How the figure was obtained. All three are evidence; none is a guess.
+ *
+ * `stated` covers a figure a person told you — a recruiter anchoring a band on a
+ * call, a hiring manager naming a level. It has no URL because it never had one:
+ * citing the careers page for a number said on a phone call would fabricate the
+ * provenance the basis exists to record.
+ */
+export type CompBasis = "posted" | "sourced" | "stated";
+
+export type CompPeriod = "year" | "month" | "hour";
+
+export interface Compensation {
+  /** Raw figures in `currency` major units, as stated by the source. */
+  low: number;
+  high: number;
+  /** ISO 4217, upper case. */
+  currency: string;
+  period: CompPeriod;
+  basis: CompBasis;
+  /** Exactly what the source said, e.g. "$140K - $210K". Shown on hover. */
+  asText: string;
+  /** Where a scraped figure came from; null for a figure read off the posting. */
+  sourceUrl: string | null;
+  /** Human name for that source, e.g. "Atlassian careers", "levels.fyi". */
+  sourceName: string | null;
+  /** When the figure was recorded (ISO). */
+  fetchedAt: string;
+  note: string | null;
+}
+
+export function isCompPeriod(v: unknown): v is CompPeriod {
+  return typeof v === "string" && (["year", "month", "hour"] as string[]).includes(v);
+}
+
+export function isCompBasis(v: unknown): v is CompBasis {
+  return v === "posted" || v === "sourced" || v === "stated";
+}
+
+function compStr(v: unknown): string | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s || null;
+}
+
+/**
+ * Validate a pay figure loaded from disk or handed over by the CLI. Returns
+ * null rather than a repaired record: a figure with no currency, an inverted
+ * range, or a scraped figure with no source URL is not a fact about the job.
+ */
+export function normalizeCompensation(
+  input: unknown,
+  { now = new Date().toISOString() }: { now?: string } = {}
+): Compensation | null {
+  if (!input || typeof input !== "object") return null;
+  const raw = input as Record<string, unknown>;
+  const low = Number(raw.low);
+  const high = Number(raw.high ?? raw.low);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || low <= 0 || high <= 0 || high < low) return null;
+  const currency = compStr(raw.currency)?.toUpperCase() ?? "";
+  if (!/^[A-Z]{3}$/.test(currency)) return null;
+  const period = isCompPeriod(raw.period) ? raw.period : "year";
+  const basis = isCompBasis(raw.basis) ? raw.basis : "posted";
+  const sourceUrl = compStr(raw.sourceUrl);
+  const sourceName = compStr(raw.sourceName);
+  if (basis === "sourced" && !sourceUrl) return null;
+  // A person-stated figure has no URL by nature, so it must be attributable by name.
+  if (basis === "stated" && !sourceName) return null;
+  return {
+    low: Math.round(low),
+    high: Math.round(high),
+    currency,
+    period,
+    basis,
+    asText: compStr(raw.asText) ?? `${low}-${high} ${currency}/${period}`,
+    sourceUrl,
+    sourceName,
+    fetchedAt: compStr(raw.fetchedAt) ?? now,
+    note: compStr(raw.note),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Job
 // ---------------------------------------------------------------------------
 
@@ -28,6 +113,8 @@ export interface Job {
   matchScore: number | null;
   matchReportPath: string | null;
   matchedAt: string | null;
+  /** A pay figure scraped from, or stated by, a source. null = none on file. */
+  comp: Compensation | null;
   /** Captures proving what the posting said (screenshots, page snapshots). */
   evidence: Evidence[];
 }
@@ -68,6 +155,7 @@ export class Job {
       matchScore: null,
       matchReportPath: null,
       matchedAt: null,
+      comp: null,
       evidence: [],
     };
     Job.validate(job, { requireId: false });
@@ -88,6 +176,9 @@ export class Job {
     job.matchScore = typeof job.matchScore === "number" ? job.matchScore : null;
     job.matchReportPath = strOr(job.matchReportPath, null);
     job.matchedAt = strOr(job.matchedAt, null);
+    // An unusable stored figure is dropped rather than repaired: the card
+    // falls back to "no pay figure on file", which is the honest state.
+    job.comp = job.comp ? normalizeCompensation(job.comp) : null;
     job.evidence = Array.isArray(job.evidence) ? job.evidence : [];
     return job;
   }
