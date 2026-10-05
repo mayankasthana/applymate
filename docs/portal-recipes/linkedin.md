@@ -353,6 +353,23 @@ mirrored under different ids (e.g. Extreme Networks 10356 vs 10357/8/9, all
 four on the board already). Do the id check *and* the company+title check;
 the id check alone would have re-added five Extreme siblings.
 
+**Re-verified 2026-10-05 — the company+title fuzzy dedupe needs word-boundary
+safety.** Exact-pair matching after stripping trailing req ids (`-10356`,
+`(On-site)`, `(Bengaluru)` — the same req mirrors under different LinkedIn ids
+with location/req suffixes) catches most mirrors, but a bare character-prefix
+match (`title[:30]`) false-positives in both directions: Amazon "Device Cloud
+Core Services" matched the boarded "Delivery Experience (DEX)" req because both
+normalize to `principal software engineer dev…`, and generic titles bare
+("Principal Software Engineer", "STAFF, SOFTWARE ENGINEER") matched *longer*
+boarded titles that are different reqs entirely. Working rule: exact normalized
+pair = dupe; otherwise prefix-match on the first 4 **words** only when the
+candidate title has ≥5 words; when in doubt, restore — a re-added req costs the
+candidate one ✕ click on the card, a hidden one is never seen. Same sweep:
+8 pairs → 80 cards → 34 deduped → 24 prefs-filtered → 22 new. The guest
+`jobPosting` curl loop held at ~2 s pacing across 22 fetches; each response
+filed directly as `jd-screenshot` evidence (html is an accepted evidence
+format), which keeps the browser free during the sweep.
+
 **Keyword pairs that actually produced agentic/AI-platform hits** (the
 candidate's on-profile area) — worth repeating on a future sweep:
 `Staff Engineer AI platform` + Bengaluru, and the generic
