@@ -82,9 +82,14 @@ the candidate to create it — never guess its contents.
 | `job evidence <jobId> <file> --kind jd-screenshot [--url U] [--note n] [--at iso]` | Copy a capture into `workspace/jobs/<id>/evidence/` and record it (png/jpg/webp/gif/pdf/html/txt/md) |
 | `job list` / `job show <id>` | List / inspect (show prints the evidence list) |
 | `job match <jobId>` | Score the JD against the dossier; persists score + writes `workspace/jobs/<id>/match.{json,md}` |
+| `job pay <jobId>` | Show the pay figure on file, or say plainly that there is none |
+| `job pay <jobId> --extract [--file page.html] [--pick n]` | Read a figure out of posting text (or a saved page snapshot) and record it as `posted`. Handles `$140K - $210K`, `€235.000 – €295.000`, `₹9,424,500`, `45,00,000`, `60 LPA`, `30K–50K` and monthly/hourly wording. A posting that states several roles' bands prints all of them; `--pick n` chooses. Nothing is recorded when the text states none |
+| `job pay <jobId> --low N --high M --currency USD --source URL [--source-name name] [--period year\|month\|hour] [--note text]` | Record a figure scraped from a source page. `--source` is required: a figure typed by hand has to name where it was read |
+| `job pay <jobId> --clear` | Remove the figure — the card falls back to "no figure on file" |
+| `node scripts/verify-pay-records.mjs` | Assert every stored figure names how it was obtained, quotes its source text, and cites an http(s) URL when it was scraped (empty workspace = failure, not a pass) |
 | `app start <jobId> [--resume path] [--force]` | Open an application. Relevance gate: refuses below `minMatchScore` unless `--force` |
 | `app list [--status s]` / `app show <id>` | List / inspect with history, submission details, evidence and the outreach/referral trail |
-| `app move <id> <status> [--note n]` | Walk the status machine (illegal skips rejected) |
+| `app move <id> <status> [--note n] [--force]` | Walk the status machine (illegal skips rejected). Moving to `ready`/`submitted` first runs `resume check` and refuses on an `error`; `--force` overrides |
 | `app artifact <id> <resume\|coverLetter\|notes> <path>` | Register a workspace-relative artifact |
 | `app evidence <appId> <file> --kind submit-screenshot [--note n] [--at iso]` | Store submit-page screenshots and confirmations |
 | `app submitted <appId> [--portal p] [--confirmation c] [--at iso]` | Stamp exact submission time + portal + confirmation; walks the machine to `submitted` |
@@ -110,6 +115,98 @@ attaching a verdict does not reset the clock, only `app move` does.
 `pipeline --stale` shows just those; `--stale-days N` moves the threshold.
 Applications already handed over (`submitted` and beyond) are never stale: that
 wait belongs to the employer, not the agent.
+
+### The board as a view (`GET /api/state`)
+
+The board is filtered and sorted entirely server-side, so the 10-second
+auto-refresh and a reload both keep the candidate's view:
+
+| parameter | effect |
+|---|---|
+| `q=` | free text over req id, company, title, score, id and URL; terms AND together |
+| `minScore=0-100` | hide cards scoring below it; `0` means "no minimum", and unscored cards are hidden by any real minimum (they have no score to compare) |
+| `pursuit=green\|amber\|red\|none` | keep one verdict class, or the cards with no verdict yet |
+| `status=a,b,c` | keep only those lanes (the view bar offers presets) |
+| `pay=with\|without\|below-floor` | has a figure / none on file / below the candidate's own floor |
+| `sort=recent\|score\|company\|pay` | order the cards **inside each lane** — a card's column is its status, never a sort |
+
+The response adds `board` (total vs shown, the active sort, the active minimum)
+and `floor` (the candidate's `salaryFloor` read into an amount + currency, or
+`null` when unset or unreadable — never a default).
+
+### Pay figures are sourced, never modelled
+
+A card shows a figure only when one was recorded from something real:
+`basis: "posted"` when the posting text states it, `basis: "sourced"` when the
+agent read it off a page and recorded the URL. There is no estimator anywhere
+in this codebase, and a listing with no figure says so on its face — "no pay
+figure" is a real answer about a company's opacity, and a fabricated midpoint
+would be worse than a blank. Three rules keep the field honest:
+
+- **A hand-typed figure needs `--source`.** `setJobComp` refuses a `sourced`
+  figure with no URL, and an invalid stored record is dropped on load rather
+  than repaired.
+- **Figures are compared to the floor only in their own currency.** Ranking
+  ₹ against $ needs an exchange rate nobody here has, so a dollar card reads
+  "not ranked against your INR floor", never "above".
+- **`job pay --extract` prints every band it found.** Board-style postings list
+  several roles' pay at once; the first is recorded and the rest are shown so
+  the wrong one can be re-picked.
+
+The card's "ask Aja to pull it" button posts to `/api/pay-request`, which queues
+a message in the chat the agent already polls. The dashboard never fetches
+anything itself: scraping happens in the browser, at human pace, under the same
+rules as the rest of the browsing.
+
+## Resume lint (what may leave the machine)
+
+```
+node bin/applymate.ts resume check <appId>        # one application
+node bin/applymate.ts resume check --all [--json] # sweep the board
+```
+
+`app move <id> ready` is gated by this: `ready` is the last state before a
+portal upload, so an `error` blocks the move and prints the rule, the offending
+line, and the fix. `--force` overrides when a finding is wrong. Exits `1` when
+errors stand.
+
+The rules and their severities live in `RULES` in
+`src/services/resume-lint.ts` — that table is the single source of truth for
+what blocks, what only advises, and the wording printed at the gate.
+
+| rule | severity | what it catches |
+|---|---|---|
+| `meta-line-title-joined` | error | two titles joined on one line — portal parsers merge the positions |
+| `meta-line-company-decorated` | error | parentheses or a sub-brand in the employer line — the parser drops the company |
+| `meta-line-date-on-heading` | error | the date range sits on the employer heading line |
+| `meta-line-date-malformed` | error | anything other than `MMM YYYY – MMM YYYY` (hyphen, partial range, inline note) |
+| `target-company-named` | error | the resume names the company it was tailored for |
+| `filename-not-generic` | error | upload is not `resumeFilename` / `coverLetterFilename` from config |
+| `filename-names-company` | error | upload filename names the target company |
+| `filename-names-other-company` | error | upload filename names a *different* company — a stale or mis-registered upload |
+| `artifact-foreign-dir` | error | the registered artifact lives in another application's directory |
+| `fact-drift` | error | a title or date disagrees with the majority of the other variants |
+| `summary-too-long` | warn | over `DEFAULTS.summaryWords` (80) |
+| `resume-too-long` | warn | over `DEFAULTS.resumeWords` (1000) |
+| `company-multi-resume` | warn | several different resume files reached one company on one day |
+| `referral-collision` | warn | multiple applications at a company that has a live referral |
+
+Configure the canonical filenames, or the generic-name rule stays dormant:
+
+```
+node bin/applymate.ts config set resumeFilename "Candidate_Resume.pdf"
+node bin/applymate.ts config set coverLetterFilename "Candidate_CoverLetter.pdf"
+```
+
+Two behaviours worth knowing:
+
+- **The fact baseline is the majority verdict**, derived across every registered
+  variant — there is no hand-maintained dates file to fall out of sync. 15
+  agreeing variants make the consensus exact and the lone dissenter the finding.
+- **Employer lines are recognised in both shapes** — the `### Company, City,
+  Country` heading and the plain unadorned line the standards note mandates.
+  Recognising only the heading form would hide the parser-safe format from the
+  fact checker, which is exactly where date disagreements need catching.
 
 ## Outreach (message-playbook bookkeeping)
 
@@ -191,7 +288,7 @@ of producing a number.
 | `chat reply <text...>` | Agent posts a reply |
 | `chat poll [--since n] [--wait seconds]` | Fetch new *user* messages; long-polls up to `wait` |
 | `chat log [--since n]` | Full transcript |
-| `chat serve [--port p]` | Local chat/review UI (loopback only); the "Needs you now" card aggregates what requires the candidate — overdue decisions, due referral follow-ups, staged-but-unsubmitted applications, upcoming deadlines; the pipeline board has a search box — filter cards by req number (e.g. `R-2646399`), company, title, score, or any free term (`AI`, `staff`); multiple terms AND together (`GET /api/state?q=`) |
+| `chat serve [--port p]` | Local chat/review UI (loopback only); the "Needs you now" card aggregates what requires the candidate — overdue decisions, due referral follow-ups, staged-but-unsubmitted applications, upcoming deadlines; the pipeline board has a search box — filter cards by req number (e.g. `R-2646399`), company, title, score, or any free term (`AI`, `staff`); multiple terms AND together (`GET /api/state?q=`). The view bar filters by **minimum match score**, **pursuit verdict**, **stage** (presets like "backlog — not sent" / "sent — waiting on them"), and **pay figure** (has one / none on file / below my floor), and sorts the cards **inside each lane** by recency, match score, company or pay. The choice is kept in `localStorage` and the topbar tally always reports the whole board, not the view |
 
 ## Browser rig (local laya form-filling rig)
 

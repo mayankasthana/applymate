@@ -96,6 +96,7 @@ judgment are yours. Full reference: `docs/scripts.md`. Cheatsheet:
 | self-learning | `learn` (advisory calibration from the candidate's own verdicts + outcomes) |
 | chat | `chat send|reply|poll|log|serve` |
 | artifacts | `render <file.md>` (markdown → standalone HTML) |
+| pre-send | `resume check <appId>`, `resume check --all` (gates `app move ready`) |
 | outreach | `outreach log|list|followup|replied` (playbook sends + the one follow-up) |
 | browser rig | `rig spec` (answers → form-filling task spec), `rig check` (probe rig services) |
 
@@ -138,6 +139,12 @@ Every command accepts `--json` for machine-readable output.
    energy there, so say so in the shortlist instead of burying it. The
    candidate picks which cards move past `discovered`.
 
+   The dashboard's view bar filters the board by minimum match score, pursuit
+   verdict, stage and pay figure, and sorts the cards inside each lane by
+   recency, score, company or pay. That view is the candidate's, stored in
+   their browser — never overwrite a filter to make a point, and never read a
+   short board as an empty one: `pipeline` in the CLI always shows everything.
+
 ### Tailor an application ("apply for this job")
 
 1. `job add` (if new) and `job match <jobId>`; if the gate refuses, tell the
@@ -160,6 +167,12 @@ Every command accepts `--json` for machine-readable output.
 4. Register them: `app artifact <id> resume applications/<id>/resume.md` (etc.).
    Move status as you go (`app move`): `discovered → matched → tailoring → ready`
    (`ready` requires a resume artifact — the toolbelt enforces it).
+   **`ready` is gated.** It is the last state before a portal upload, so
+   `app move <id> ready` refuses to move while `resume check` reports an error
+   (meta-line format, a filename naming a company, an artifact pointing at
+   another application's directory, a date that drifts from the other variants),
+   and prints the rule and the fix. `--force` overrides when a finding is wrong;
+   `--all` sweeps the board. Run `resume check <id>` any time to see it early.
 5. Render for review: `render` each artifact, then start the UI (`chat serve`)
    if it is not running and tell the candidate what to review. `ready → submitted`
    **only** after the candidate explicitly confirms, and only the candidate submits.
@@ -202,7 +215,17 @@ refine, are:
 - **Generic filename on everything that leaves the machine.** The uploaded /
   submitted resume file must be named for the candidate only — never the target
   company, role, or site, since portals show the filename to recruiters. Keep
-  per-company naming for the candidate's private dossier copies only.
+  per-company naming for the candidate's private dossier copies only. Declared
+  once in config (`config set resumeFilename`, `config set coverLetterFilename`)
+  so the linter enforces it instead of guessing.
+- **One resume per company.** Multiple roles at one company is fine and often
+  useful — recruiters share candidate pools. Several *different* resumes
+  reaching one company in one sitting is not: to a shared recruiting org it
+  reads as several strangers. Reuse one file across that company's roles and
+  put the tailoring in the cover letter. While a referral is live at a company,
+  send exactly one application there — let the referrer make the internal intro.
+- **Every variant tells the same story.** Titles and dates identical across all
+  tailored variants; two resumes from one person must not disagree on a date.
 
 ### Apply in the browser (forms, portals, Next buttons)
 
@@ -428,6 +451,42 @@ portal, and confirmation number (`app evidence` + `app submitted`). Files are
 auto-stamped and filed under `workspace/jobs/<id>/evidence/` and
 `workspace/applications/<id>/evidence/`; reviewable in the UI on each
 application card.
+
+## Pay figures on the board — sourced, never estimated
+
+Every card on the dashboard can carry a pay figure, and **a figure is always
+read from a real source, never modelled**. There are two legitimate ways in:
+
+- `job pay <jobId> --extract [--file page.html]` — the posting text (or a page
+  snapshot already captured as evidence) states a range. Record it with
+  `--pick n` when the text lists several roles' bands, which company boards
+  routinely do in one posting.
+- `job pay <jobId> --low N --high M --currency USD --source <url>` — the
+  figure came off a comp page the agent opened. `--source` is required; the
+  toolbelt refuses a hand-typed number with no citation.
+
+**Never fill a gap with an estimate.** No benchmark table, no "roughly this
+much for this level at this company", no inference from the candidate's floor.
+A card with nothing on file says "no pay figure", and that is a real answer: it
+tells the candidate the company is opaque, which is decision-relevant in
+itself. Most India-targeted postings publish nothing (Ashby boards with
+compensation disabled, Greenhouse/SmartRecruiters APIs with no pay fields,
+tenants whose Workday site is down, and comp aggregators behind bot
+protection — which the browser rules forbid working around). Say that plainly
+rather than filling the column.
+
+Two more rules the code enforces, worth knowing before you touch it:
+
+- **Compare to `prefs salaryFloor` only in the same currency.** Rupees are
+  never ranked against dollars without an exchange rate, so a foreign card
+  reads "not ranked against your floor", never "above".
+- **Record what the source said verbatim** (`asText`) plus the date. It is
+  what makes a figure checkable later, and `node scripts/verify-pay-records.mjs`
+  fails if any stored figure stops being traceable.
+
+The dashboard's "ask Aja to pull it" button posts to `/api/pay-request`, which
+queues a message for you in the chat you already poll — so the fetch happens in
+the browser at human pace under the rules above, never from the UI process.
 
 ## Working on this repo itself
 
