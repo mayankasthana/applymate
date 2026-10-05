@@ -631,6 +631,44 @@ buttons and the send-options one sits beside it. Scope to the compose form
 (`document.querySelector('div[role="textbox"][aria-label="Write a message…"]')?.closest('form')`) and match
 `aria-label`/`innerText === 'Send'` with `b.type === 'submit'`, then dispatch its own `.click()`.
 
+**Scope the dedupe check to the composer — a body-wide filename scan counts the THREAD (verified 2026-10-05).**
+The "chip count is the dedupe check" rule above is right, but the obvious
+implementation is wrong when you are **re-sending** a file that is already in the
+conversation: a `document.body.innerText.match(/<resume-name>/g)` on a re-send
+returns one hit for the compose chip **and one for the earlier bubble still in
+the thread**, so it reads as a duplicate when there is exactly one attachment.
+The second send was nearly withheld over a phantom double-attach. Two fixes,
+either fine:
+
+```js
+// chip count — the `figure` only exists for a live attachment
+Array.from(document.querySelectorAll('figure'))
+  .map(f => f.innerText).filter(t => t.includes('Resume'))   // -> 1
+
+// or walk up from the composer to the SMALLEST ancestor that mentions the file.
+// Keep the first match and BREAK — overwriting on every match walks all the way
+// up to <body> and matches the whole page, which is the same false positive again.
+let c = box.closest('form'), best = null;
+for (let i = 0; i < 10 && c; i++) {
+  if ((c.innerText || '').includes('Resume.pdf')) { best = c; break; }
+  c = c.parentElement;
+}
+```
+
+Either way assert the chip reads `… 185 KB Attached` before sending. Also note
+`button[aria-label^="Remove attachment"]` matched **nothing** on this run even
+with a live chip attached, so do not read `removeCount === 0` as "no
+attachment" — the `figure` chip is the reliable read.
+
+**A compose-length read taken right after a successful send can be non-zero (verified 2026-10-05).** The third
+send signal is "compose `textContent` length is 0", but reading it ~2.5 s after
+the click returned `3` on a send that had in fact delivered, and `Send` was
+still enabled. Re-reading it seconds later gave `""` with `innerHTML` reduced to
+`<p><br></p>` — an empty contenteditable placeholder. Judge the send on the
+**thread marker plus the attachment bubble**, which is what actually proves
+delivery, and treat a single early compose read as unconfirmed rather than as
+failure. Do not "fix" it by sending a second copy.
+
 The full working order is: type the text with the `execCommand` insert above → attach → read the size chip →
 hover-travel click Send → verify with all three send signals. Attachment and text send as ONE message; do not
 attach in a separate action expecting a second message.
