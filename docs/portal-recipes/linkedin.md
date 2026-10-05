@@ -1012,3 +1012,46 @@ by a verify call that referenced an undefined variable; the guard compared the
 typed `textarea.value` against the intended string and refused to dispatch Send.
 That is the right failure — a truncated or doubled type is caught before the
 invite is spent, and the draft survives for a clean retry.
+
+## The Singapore-blamed Coupang req was a retitle, not a location mismatch (2026-10-05)
+
+**Goal:** liveness-check the Coupang "Staff Backend Engineer, Commerce" req
+(LinkedIn id 4472503794) that an earlier session boarded as `app-m2il`.
+
+**The earlier call was wrong, and the correction matters.** The sweep entry above
+says that req "appears on `coupang.jobs` only as **Singapore**" and advises
+treating the Bengaluru listing as unverified. Both halves are false. The req is
+live and it **is** Bengaluru — Coupang **retitled** it. The board record is
+`7916740` **"Staff Backend Engineer - Intelligent Cloud"**, Bengaluru, which is
+the same posting under a new name and a new LinkedIn id. Do not retire a req on
+a location mismatch alone: diff the JD text before concluding anything.
+
+**How to prove two postings are the same req (no guesswork).** Shared 8-gram
+overlap on the unescaped JD text settles it. Normalize to lowercase, split on
+whitespace, and count how many of source A's 8-word windows appear in B:
+
+- Singapore `8194727` "Staff Backend Engineer" vs the Commerce JD → **154/726** (different req)
+- Bengaluru `7916740` "Intelligent Cloud" vs the Commerce JD → **718/734** (same req)
+
+Above ~90% it is a retitle or a mirror; below ~30% they are different jobs. This
+is the same test that catches the Extreme Networks and Amazon duplicate clusters
+in the sweep entry above, but it works on JD *bodies* rather than titles — which
+matters because a retitle breaks every title-based dedupe.
+
+**`coupang.jobs` is Greenhouse, and the board API answers the liveness question
+for free (2026-10-05).** The site 403s every plain request (`/api/jobs`,
+`/en/api/jobs`, `/jobs.json` all 403; `/api/v1/jobs` 301s), so the browser looks
+like the only way in. It is not: the listing rows carry `gh_jid=<id>`, and the
+board token is the company name, so
+
+```
+https://boards-api.greenhouse.io/v1/boards/coupang/jobs?content=true
+```
+
+returns all 688 open reqs with full JD bodies in one unauthenticated call
+(12.6 MB). Liveness is then a substring match of the req id in that payload —
+`?gh_jid=7916740` appears for the Bengaluru req, and no id matches the retired
+LinkedIn `gh_jid=4472503794`, which is why the id check alone reads as
+"delisted". See [greenhouse.md](greenhouse.md) for the unescape trap; the
+double-escape in this board's content is worse than the documented case and
+costs 20–55 match points if you decode once instead of to a fixed point.

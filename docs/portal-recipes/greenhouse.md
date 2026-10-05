@@ -185,3 +185,83 @@ does not appear on the company's own board is pitching either an unpublished sea
 renamed posting, or a different req entirely. Diffing the pitch against the full board
 inventory is cheap and is the only way to know which one before tailoring — do not
 assume they are the same req.
+
+## Double-escaped entities: decode to a fixed point, not once (verified 2026-10-05, Coupang)
+
+**Goal:** capture a JD for `job match` and get a score that reflects the req.
+
+**Naive approach fails — and it fails silently in the most expensive direction.**
+The recipe above says "unescape **first**, then strip", and that is necessary but
+not sufficient on boards like Coupang's. Much of the content carries
+`&amp;nbsp;` (an escaped `&nbsp;`), so a **single** decode pass leaves a literal
+`nbsp` in the output. The stored JD then looks like clean prose, `job match`
+prints an ordinary-looking score, and nothing errors.
+
+**The tell is in the `missing` list, and it moved real numbers by 20–55 points:**
+
+| req | decode once | decode to fixed point |
+|---|---|---|
+| Staff Backend Engineer - K8 (Envoy) | 19 | **76** |
+| Senior Staff Backend Engineer (IAM) | 25 | **79** |
+| Senior Staff Backend Engineer (Service Mesh) | 20 | **74** |
+| Senior Staff Backend Engineer - (K8) | 21 | **70** |
+| Staff Backend Engineer - Intelligent Cloud | 65 | **83** |
+
+`nbsp` — and `amp`, `quot`, `lt`, `gt`, `apos` — are junk vocabulary, so they
+enter the denominator and drag the score down. A role that clears the
+candidate's relevance floor can be silently gated out by a decoding bug. The
+Envoy req scored 19/100 as "stretch" and is in fact one of the closest matches
+on the board.
+
+**Working path — decode repeatedly until the string stops changing:**
+
+```js
+function unescapeStable(s, maxPasses = 6) {
+  let t = s;
+  for (let i = 0; i < maxPasses; i++) {
+    const next = t
+      .replace(/&nbsp;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"').replace(/&apos;/gi, "'").replace(/&#39;/gi, "'")
+      .replace(/&#x27;/gi, "'").replace(/&amp;/gi, '&');
+    if (next === t) break;          // fixed point reached
+    t = next;
+  }
+  return t;
+}
+// decode -> strip tags -> unescapeStable again (second fixed-point pass)
+```
+
+**Assert before storing** — the recipe's leftover check stands, and on this board
+it must run *after* the fixed-point decode:
+
+```js
+const audit = (t) => ({
+  tags: (t.match(/<[a-zA-Z/][^>]*>/g) || []).length,
+  ents: (t.match(/&(?:nbsp|lt|gt|quot|apos|amp|#39|#x27);/g) || []).length,
+});
+```
+
+All 16 Coupang India reqs re-captured this way returned `tags=0 ents=0`.
+
+**A board can also disagree with its own search facet.** Coupang's
+`coupang.jobs` Bengaluru facet listed `7938018` "Staff Security Engineer (Data
+Security Engineering)", but the board payload puts that req in **Seoul, South
+Korea**. Trust the structured `location.name` from the API over the rendered
+listing card when the two conflict.
+
+**Verified:** 2026-10-05, Coupang board token `coupang`, 688 reqs, 39
+India-located, 16 captured and re-scored clean.
+
+## A retitled req breaks id- and title-based liveness checks (verified 2026-10-05, Coupang)
+
+A req pulled from an aggregator can be live on the company board under a
+**different title and a different id**. Substring-matching the aggregator's
+`gh_jid` against the board payload returns "not found", which reads exactly like
+a delisting — and a delisted req gets closed.
+
+Diff the JD **bodies** instead. Normalize both to lowercase, split on
+whitespace, and count how many 8-word windows of A appear in B: **>90% = same
+req under a new name**, **<30% = different posting**. On Coupang this separated
+a retitled Bengaluru req (718/734 shared 8-grams, id and title both changed)
+from a genuinely different Singapore req with a confusingly similar title
+(154/726). No title-based or id-based check catches this; only the text does.
