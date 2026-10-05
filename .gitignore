@@ -31,3 +31,8 @@ node_modules/
 npm-debug.log*
 *.tsbuildinfo
 browser-rig/results/
+
+# unlazy gate ledger + pipeline state: local working artifacts, never part of the product
+GATES.md
+.unlazy/
+.unlazy-hook-state.json
