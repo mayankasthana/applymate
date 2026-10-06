@@ -415,3 +415,73 @@ This tenant issues **no confirmation number**. The proof is Candidate Home → M
 → the row (`Job Req` + `My Application Status: Application Received` + `Date Submitted`),
 plus the "Application Submitted" modal. The modal covers the table — dismiss it and scroll
 to the row to capture both. Assert `Active (1)` rather than trusting the modal.
+
+## Referral `shared_id` apply flow on `wd504` (verified 2026-10-06, Walmart R-2648853)
+
+End-to-end: signed-in user, resume parse ON, six steps after sign-in
+(Autofill → My Information → My Experience → Application Questions → Voluntary
+Disclosures → Review → Submit). Every finding below is from this one flow.
+
+### The referral token survives the whole flow — no special path needed
+
+- The Workday referral email links the posting with `?shared_id=<token>`. Opening that
+  URL and clicking `Apply` → `Autofill with Resume` keeps the token in the URL through
+  **every** step including the post-submit `jobTasks/completed/application` page. Nothing
+  extra to do; do not strip the query string.
+- Proof the referral actually tagged the application: the submission receipt's
+  business-process line reads `Job Application: <name> (Referral) - R-<id> (<C-id>) on
+  MM/DD/YYYY` — the `(Referral)` marker. Without it, the shared_id did not carry.
+- This tenant DOES issue a confirmation number (the `C-…` in that line), unlike Eli
+  Lilly. The Candidate Home row and the receipt both carry it.
+
+### The flow can silently regress a completed step — finish each step in one call
+
+- Naive approach fails: after a locator error on a later step, the SPA re-rendered back
+  to **step 1** with the uploaded resume chip gone (once, mid-flow, ~40s after the step
+  had been completed). No error is shown; the stepper is the only tell.
+- Working path: verify the stepper still shows your step after **every** call; if it
+  regressed, redo the lost step (upload + Continue) **in the same JS call** that
+  verifies the chip. Linger as little as possible between steps.
+
+### Select-one dropdowns: dispatch both the button AND the option
+
+- On this tenant `locator.click()` on dropdown buttons and `option` elements times out
+  on actionability (shadow DOM), even when `count() === 1`. The recipe-level
+  `evaluate(el => el.click())` pattern applies to **both** sides:
+  - open: find the button by `aria-label` text match, dispatch click;
+  - pick: `document.querySelectorAll('[role="option"]')` → match `textContent.trim()`
+    exactly → dispatch click;
+  - verify: re-read the button's `aria-label` — it flips to `<selected value> Required`.
+- Options for a Yes/No question are exactly `["Select One","Yes","No"]` while open;
+  after a selection commits, stale hidden options remain in the DOM — always scope by
+  exact text and verify via the button label, not by option count.
+- Multi-select typeaheads (Field of Study here) stay dead as documented above; if the
+  field is optional, leave it and say "No Response" is expected on Review.
+
+### Answering SMS "Opt-In" spawns two extra required questions
+
+- Choosing `Opt-In to receive text messages from Walmart` re-renders the questionnaire
+  with two fields that did not exist before:
+  1. **Confirm your 10-digit mobile phone number** — numeric only, no country code,
+     no separators; and
+  2. **"Are you a Indian Citizen or OCI holder?"** (options: `Indian Citizen` /
+     `OCI Holder`).
+- Expect the Save to fail once with those two errors if you answered Opt-In earlier in
+  the same pass — fill both and re-save.
+
+### Required consent checkbox
+
+- `getByRole("checkbox").check({ force: true })` times out here. Find the step's single
+  `input[type="checkbox"]` (light DOM on this tenant) and dispatch a DOM click; verify
+  via the returned `checked`.
+
+### Post-submit proof, three layers
+
+1. The `jobTasks/completed/application` page renders an **"Application Submitted"**
+   dialog; the underlying Candidate Home table already shows the new row (screenshot the
+   row: `row.scrollIntoView({block:"center"})` then one viewport screenshot).
+2. Re-opening the req's apply URL afterwards yields the dedup guard
+   **"You've already applied for this job"** — a second, capture-friendly proof.
+3. The receipt email (arrives in minutes) carries the `(Referral)` tag + C-number.
+   Note the table's "Date Submitted" renders the tenant's US-Central calendar date,
+   which can differ from the candidate's local date near midnight.
