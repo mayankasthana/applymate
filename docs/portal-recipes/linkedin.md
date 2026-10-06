@@ -1113,3 +1113,28 @@ LinkedIn `gh_jid=4472503794`, which is why the id check alone reads as
 "delisted". See [greenhouse.md](greenhouse.md) for the unescape trap; the
 double-escape in this board's content is worse than the documented case and
 costs 20–55 match points if you decode once instead of to a fixed point.
+
+
+**The guest posting API is dead; email digest subjects are lies; the id is
+truth (2026-10-06).** Three findings from an email-sweep registration pass:
+
+1. `linkedin.com/jobs/guest/jobs/api/jobPosting/{id}` returns an auth wall to
+   curl **and** a "This page doesn't exist" shell in the browser. Do not retry
+   it. The public `linkedin.com/jobs/view/{id}` still renders logged-in.
+2. On a *fresh* tab the job page renders only the top card; the description
+   XHR hangs (a `progressbar "In progress"` sits where "About the job" should
+   be) and `body.innerText` tops out around 1.5 KB. The description **does**
+   hydrate on a tab that has been open a while — reuse one "warm" tab for all
+   navigations, wait ~4 s, then extract
+   `Array.from(new Set([body.innerText, ...document.querySelectorAll("[class*='description'], .show-more-less-html__markup")].map(e => e.innerText))).join("\n")`
+   (the Set-join matters: description containers repeat the body text).
+3. A LinkedIn job-alert digest puts its subject on every link it carries, and
+   the links routinely belong to *other* jobs (a "Synopsys" alert linked an
+   EnCharge AI req; a "Visa" alert linked GitLab and Nanonets). Never trust the
+   digest subject — navigate the id and read the real `<title>`.
+
+Bonus: the top card's **Apply** anchor carries the canonical ATS URL (Workday
+`REF...` path, Greenhouse job id, SmartRecruiters posting) even when the
+description never loads. Harvest `a[href*="safety/go"]`, decode the
+`url=` parameter, and fetch the JD from the ATS API (cxs / boards-api /
+smartrecruiters API) instead of fighting the LinkedIn page at all.
