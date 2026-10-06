@@ -485,3 +485,21 @@ Disclosures → Review → Submit). Every finding below is from this one flow.
 3. The receipt email (arrives in minutes) carries the `(Referral)` tag + C-number.
    Note the table's "Date Submitted" renders the tenant's US-Central calendar date,
    which can differ from the candidate's local date near midnight.
+
+### Resume-parsed descriptions carry the PDF's hard line-wraps (verified 2026-10-06)
+
+- The parser copies the resume PDF's ~100-char visual line breaks into Role Description
+  as literal `\n`s, mid-sentence. On the `wd504` tenant the field renders with
+  `white-space: normal`, so the portal **displays** flowing sentences — the wraps are
+  invisible on screen and only surface on copy-out or to downstream consumers of the
+  raw text. Check with `getComputedStyle(el).whiteSpace` before assuming a visible defect.
+- The submitted application is **read-only** (Related Actions: View / Withdraw only —
+  no edit), and this tenant has **no candidate-profile editor** (Settings holds only
+  Personal Information / Change Email). Experience data pre-fills the next application
+  from the last submitted one ("Use My Last Application"). So there is no in-place fix;
+  the fix belongs in the fill step.
+- **Normalize before typing**: when carrying parser-produced (or resume-extracted) text
+  into any Workday textbox, join the visual line-wraps first — keep newlines only at
+  section boundaries, then apply the illegal-character scrub. Keep a clean-text copy of
+  every submitted application's role descriptions next to the artifacts so the next
+  fill starts clean.
