@@ -685,7 +685,7 @@ function renderTriage(a){
   staged.forEach((s) => items.push({
     kind: "staged", cls: "staged", appId: s.id || null,
     title: s.company + " — " + s.title,
-    meta: "tailored and staged · waiting on your explicit yes to submit",
+    meta: (s.wait && s.wait.detail) || "tailored and staged · waiting on your explicit yes to submit",
   }));
 
   const cards = $("#needcards");
@@ -722,9 +722,10 @@ function renderTriage(a){
     group("Referral follow-ups due (the one nudge) — " + dueFu.length, dueFu.map((m) =>
       "<li><span>" + esc(m.target) + " · " + esc(m.targetRole) +
       (m.appId ? appTag(m.appId) : "") + '</span><span class="when">sent ' + esc(String(m.sentAt).slice(0, 10)) + "</span></li>"), "followups") +
-    group("Staged — awaiting your submit yes", staged.map((s) =>
-      '<li><span>' + esc(s.company) + " — " + esc(s.title) + appTag(s.id) +
-      '</span><span class="when">not yet submitted</span></li>')) +
+    group("Staged — what each is waiting on", staged.map((s) =>
+      '<li' + (s.wait && s.wait.detail ? ' title="' + esc(s.wait.detail) + '"' : "") + '><span>' +
+      esc(s.company) + " — " + esc(s.title) + appTag(s.id) +
+      '</span><span class="when">' + esc((s.wait && s.wait.label) || "not yet submitted") + "</span></li>")) +
     group("Coming up", (a.upcomingReminders || []).map((r) =>
       "<li><span>" + esc(r.title) + (r.appId ? appTag(r.appId) : "") +
       '</span><span class="when">due ' + esc(String(r.dueAt).slice(0, 10)) + "</span></li>"));

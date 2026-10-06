@@ -86,4 +86,75 @@ export function referralCounts(msgs: OutreachRecord[]): Map<string, number> {
   return counts;
 }
 
+// --- why a staged application is waiting ------------------------------------
+// Derived only from recorded thread state, never guessed: the board names the
+// real wait — the candidate's yes, a live referral, or an unanswered outreach.
+
+export type StagedWaitKind = "you" | "referral" | "outreach";
+
+export interface StagedWait {
+  kind: StagedWaitKind;
+  /** Short form for dense rows (the Actions view's "when" column). */
+  label: string;
+  /** Card-meta form: names the thread, its person, and its date. */
+  detail: string;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// ISO-date convention, same as the rest of the UI (sentAt slices), so the
+// displayed day never drifts with the server's timezone.
+const sentDay = (iso: string): string => {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const d = new Date(t);
+  return MONTHS[d.getUTCMonth()] + " " + d.getUTCDate();
+};
+
+/** "Name (context, more context)" → "Name": card meta stays scannable. */
+const shortTarget = (target: string): string => (target.split(" (")[0] ?? target).trim();
+
+const roleText = (role: string): string => role.replace(/-/g, " ");
+
+export function stagedWait(msgs: OutreachView[], now = Date.now()): StagedWait {
+  const newest = [...msgs].sort((a, b) => String(b.sentAt).localeCompare(String(a.sentAt)));
+  // A referral ask outranks other threads on the same application — per the
+  // playbook it gates whether the application should move at all.
+  const thread = newest.find((m) => m.targetRole === "referrer") ?? newest[0];
+  if (!thread) {
+    return {
+      kind: "you",
+      label: "waiting on you",
+      detail: "tailored and staged — nothing sends without your explicit yes",
+    };
+  }
+  const who = shortTarget(String(thread.target));
+  const day = sentDay(String(thread.sentAt));
+  const nudgeDay = thread.followUpSentAt ? sentDay(String(thread.followUpSentAt)) : "";
+  const replyDay = thread.repliedAt ? sentDay(String(thread.repliedAt)) : "";
+  if (thread.targetRole === "referrer") {
+    if (thread.state === "replied") {
+      return { kind: "referral", label: "referral in motion", detail: `${who} replied ${replyDay} — referral live` };
+    }
+    if (thread.state === "follow-up-due") {
+      return { kind: "referral", label: "referral ask idle", detail: `ask to ${who} sent ${day} — the one nudge is due` };
+    }
+    if (thread.state === "followed-up") {
+      return { kind: "referral", label: "waiting on referral", detail: `nudged ${who} ${nudgeDay} — still no reply` };
+    }
+    return { kind: "referral", label: "waiting on referral", detail: `referral ask with ${who} sent ${day} — no reply yet` };
+  }
+  const whom = `${who} (${roleText(String(thread.targetRole))})`;
+  if (thread.state === "replied") {
+    return { kind: "outreach", label: "outreach replied", detail: `${whom} replied ${replyDay} — submit stays your call` };
+  }
+  if (thread.state === "follow-up-due") {
+    return { kind: "outreach", label: "outreach idle", detail: `${whom} — sent ${day}, nudge due` };
+  }
+  if (thread.state === "followed-up") {
+    return { kind: "outreach", label: "waiting on outreach", detail: `${whom} — nudged ${nudgeDay}, still no reply` };
+  }
+  return { kind: "outreach", label: "waiting on outreach", detail: `${whom} — sent ${day}, no reply yet` };
+}
+
 const bySentAtDesc = (a: OutreachRecord, b: OutreachRecord): number => String(b.sentAt).localeCompare(String(a.sentAt));

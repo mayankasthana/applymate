@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
-import { OutreachService, outreachState } from "../src/services/outreach.ts";
+import { OutreachService, outreachState, stagedWait, withState } from "../src/services/outreach.ts";
 import { OutreachMessage, isFollowUpDue, followUpDueAt, FOLLOW_UP_AFTER_DAYS } from "../src/domain.ts";
 import { JsonCollection, type Collection } from "../src/adapters/json-collection.ts";
 import { runCommand } from "../src/cli.ts";
@@ -189,4 +189,75 @@ test("outreach CLI: rejects unknown role/channel and missing flags", async () =>
     assert.equal(missing.code, 1);
     assert.match(missing.stderr, /--role and --channel/);
   });
+});
+
+test("stagedWait: no threads — the wait is the candidate's yes", () => {
+  const w = stagedWait([]);
+  assert.equal(w.kind, "you");
+  assert.equal(w.label, "waiting on you");
+  assert.match(w.detail, /your explicit yes/);
+});
+
+test("stagedWait: a referrer thread outranks newer non-referrer outreach", () => {
+  const now = Date.parse("2026-09-22T10:00:00.000Z");
+  const referrer = withState(OutreachMessage.create(
+    { target: "Dana Reyes", targetRole: "referrer", channel: "dm", appId: "app-1" },
+    { now: "2026-09-19T10:00:00.000Z" }), now);
+  const recruiter = withState(OutreachMessage.create(
+    { target: "Sam Recruiter", targetRole: "recruiter", channel: "email", appId: "app-1" },
+    { now: "2026-09-21T10:00:00.000Z" }), now);
+  const w = stagedWait([referrer, recruiter], now);
+  assert.equal(w.kind, "referral");
+  assert.equal(w.label, "waiting on referral");
+  assert.ok(w.detail.includes("Dana Reyes"));
+  assert.ok(w.detail.includes("Sep 19"));
+  assert.ok(!w.detail.includes("Sam"));
+});
+
+test("stagedWait: replied referrer means the referral is in motion", () => {
+  const now = Date.parse("2026-10-06T10:00:00.000Z");
+  const base = OutreachMessage.create(
+    { target: "Dana Reyes", targetRole: "referrer", channel: "dm", appId: "app-1" },
+    { now: "2026-09-20T10:00:00.000Z" });
+  const w = stagedWait([withState({ ...base, repliedAt: "2026-09-24T09:00:00.000Z" }, now)], now);
+  assert.equal(w.kind, "referral");
+  assert.equal(w.label, "referral in motion");
+  assert.match(w.detail, /Dana Reyes replied Sep 24/);
+});
+
+test("stagedWait: an idle referrer ask names the due nudge", () => {
+  const now = Date.parse("2026-10-06T10:00:00.000Z");
+  const idle = withState(OutreachMessage.create(
+    { target: "Dana Reyes", targetRole: "referrer", channel: "dm", appId: "app-1" },
+    { now: "2026-09-20T10:00:00.000Z" }), now);
+  assert.equal(idle.state, "follow-up-due");
+  const w = stagedWait([idle], now);
+  assert.equal(w.kind, "referral");
+  assert.equal(w.label, "referral ask idle");
+  assert.match(w.detail, /the one nudge is due/);
+});
+
+test("stagedWait: followed-up thread reports the nudge date, not the original send", () => {
+  const now = Date.parse("2026-10-06T10:00:00.000Z");
+  const base = OutreachMessage.create(
+    { target: "Aruna Ganesan (Talentiser, iCIMS Principal Data Engineer)", targetRole: "recruiter", channel: "email", appId: "app-2" },
+    { now: "2026-09-20T10:00:00.000Z" });
+  const w = stagedWait([withState({ ...base, followUpSentAt: "2026-09-30T09:00:00.000Z" }, now)], now);
+  assert.equal(w.kind, "outreach");
+  assert.equal(w.label, "waiting on outreach");
+  assert.match(w.detail, /Aruna Ganesan \(recruiter\) — nudged Sep 30, still no reply/);
+  // the card meta shows the short name only — context stays on the records
+  assert.ok(!w.detail.includes("Talentiser"));
+});
+
+test("stagedWait: replied outreach means the thread is live but submit stays the candidate's", () => {
+  const now = Date.parse("2026-10-06T10:00:00.000Z");
+  const base = OutreachMessage.create(
+    { target: "Sam Recruiter", targetRole: "recruiter", channel: "email", appId: "app-3" },
+    { now: "2026-09-22T10:00:00.000Z" });
+  const w = stagedWait([withState({ ...base, repliedAt: "2026-09-26T09:00:00.000Z" }, now)], now);
+  assert.equal(w.kind, "outreach");
+  assert.equal(w.label, "outreach replied");
+  assert.match(w.detail, /replied Sep 26/);
+  assert.match(w.detail, /your call/);
 });

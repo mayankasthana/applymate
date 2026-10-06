@@ -230,7 +230,9 @@ outreach list on the application sheet, and `pipeline` / `app show` carry the
 same status — so at any moment it is clear which roles have a referral in
 motion and which do not. In the review UI's needs-you panel, due follow-ups
 collapse into one batch card (count + sent-date span, clicking it jumps to the
-list); the per-person list lives, unabridged, in the Actions view.
+list); the per-person list lives, unabridged, in the Actions view. Staged
+cards name what each one is waiting on — the candidate's yes, a live referral,
+or an unanswered outreach — derived from the recorded threads, never guessed.
 
 ## Reminders (dated decisions that must resurface)
 

@@ -8,7 +8,7 @@ import { UI_HTML } from "./server-ui.ts";
 import { renderDocument, escapeHtml } from "./services/markdown.ts";
 import { loadDossierIndex } from "./services/dossier.ts";
 import { scoreMatch } from "./services/matcher.ts";
-import { withState } from "./services/outreach.ts";
+import { stagedWait, withState, type OutreachView } from "./services/outreach.ts";
 import { countBoard, parseBoardView, viewBoard } from "./services/board-view.ts";
 import { parseFloor, payDisplay } from "./services/comp.ts";
 
@@ -71,6 +71,16 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
       services.outreach.list({ due: true }),
     ]);
     const now = Date.now();
+    const outreachViews = outreach.map((m) => withState(m));
+    // appId → that application's threads, so each staged card can name what
+    // it is waiting on (the candidate's yes, a referral, an outreach reply).
+    const outreachByApp = new Map<string, OutreachView[]>();
+    for (const view of outreachViews) {
+      if (!view.appId) continue;
+      const list = outreachByApp.get(view.appId) ?? [];
+      list.push(view);
+      outreachByApp.set(view.appId, list);
+    }
     // The candidate's own floor decides what "below" means; a missing or
     // unreadable one disables the comparison rather than inventing a number.
     const floor = parseFloor(prefs.find((p) => p.key === "salaryfloor")?.value);
@@ -92,7 +102,7 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
       floor,
       preferences: prefs,
       missingPreferences: missing,
-      outreach: outreach.map((m) => withState(m)),
+      outreach: outreachViews,
       latestMessageId: await services.chat.latestId(),
       dossierIndexed: await fileExists(services.paths.dossierIndex),
       // the "what do you need from me" panel — computed from the full board,
@@ -104,7 +114,10 @@ async function handle({ req, res, services }: { req: IncomingMessage; res: Serve
         })),
         upcomingReminders: openReminders.filter((r) => Date.parse(r.dueAt) > now).slice(0, 5),
         dueFollowUps: dueFollowUps.map((m) => withState(m)),
-        staged: pipeline.ready ?? [],
+        staged: (pipeline.ready ?? []).map((card) => ({
+          ...card,
+          wait: stagedWait(outreachByApp.get(card.id) ?? []),
+        })),
       },
     });
   }

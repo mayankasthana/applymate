@@ -222,7 +222,7 @@ test("state endpoint aggregates actions: overdue decisions, follow-ups due, stag
         dueReminders: { title: string; overdueDays: number }[];
         upcomingReminders: { title: string }[];
         dueFollowUps: { target: string; state: string }[];
-        staged: { id: string; company: string }[];
+        staged: { id: string; company: string; wait: { kind: string; label: string; detail: string } }[];
       };
     };
     assert.deepEqual(state.actions.dueReminders.map((r) => r.title), ["old fallback"]);
@@ -232,6 +232,12 @@ test("state endpoint aggregates actions: overdue decisions, follow-ups due, stag
     assert.equal(state.actions.dueFollowUps[0]!.target, "Jane Referrer");
     assert.equal(state.actions.dueFollowUps[0]!.state, "follow-up-due");
     assert.ok(state.actions.staged.some((s) => s.id === app.id && s.company === "Acme"));
+    // the staged app carries the reason it is waiting: Jane Referrer's ask is
+    // 10 days old with no reply, so the card names the idle referral ask
+    const stagedApp = state.actions.staged.find((s) => s.id === app.id)!;
+    assert.equal(stagedApp.wait.kind, "referral");
+    assert.equal(stagedApp.wait.label, "referral ask idle");
+    assert.match(stagedApp.wait.detail, /Jane Referrer/);
   });
 });
 
