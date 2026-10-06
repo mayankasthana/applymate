@@ -337,6 +337,7 @@ export const UI_HTML = `<!doctype html>
     border-radius:7px; padding:.35rem .7rem; font-size:12px; cursor:pointer;
   }
   .rescore:hover { border-color:var(--amber); }
+  .actgrp.flash { outline:2px solid var(--amber); outline-offset:6px; border-radius:8px; }
 </style>
 </head>
 <body>
@@ -460,7 +461,7 @@ export const UI_HTML = `<!doctype html>
     <div id="viewActions" style="display:none">
       <section class="triage">
         <h1 class="bigcount" id="actionsCount">—</h1>
-        <p class="subline">every dated decision and follow-up, unabridged</p>
+        <p class="subline" id="actionsSubline">every dated decision and follow-up, unabridged</p>
       </section>
       <div id="actionsBody"></div>
     </div>
@@ -516,10 +517,13 @@ function pursuitBadge(p){
 
 function refBadge(appId){
   const msgs = outreachByApp[appId] || [];
+  // Silence renders nothing: a "no ref" pill on every card nobody has been
+  // messaged about yet is noise — the badge exists to flag referral motion,
+  // not to stamp 300 identical non-facts across the board.
+  if (!msgs.length) return "";
   const refs = msgs.filter((m) => m.targetRole === "referrer");
   if (refs.length) return '<span class="pill" title="referral outreach sent to ' + refs.length + ' people">refs ' + refs.length + "</span>";
-  if (msgs.length) return '<span class="pill match mid" title="outreach sent, but no referral yet">no ref</span>';
-  return '<span class="pill" title="no outreach logged for this application yet">no ref</span>';
+  return '<span class="pill match mid" title="outreach sent, but no referral yet">no ref</span>';
 }
 
 // The pay pill. A figure is only ever shown when one was recorded from a real
@@ -622,7 +626,9 @@ async function refreshPrefs(){
 // "Needs you now": overdue decisions, due follow-ups, staged submits, and the
 // next deadlines — computed server-side from the full board, so a board-search
 // filter never hides an action. The big count is the one thing that may not be
-// missed; the cards under it carry the detail.
+// missed; the cards under it carry the detail. Due follow-ups render as one
+// batch card (they are one repeated action), the per-person list lives in the
+// Actions view.
 function appTag(id){
   return ' <button class="applink" data-app="' + esc(id) + '">[' + esc(id) + ']</button>';
 }
@@ -635,24 +641,39 @@ function renderTriage(a){
   const dueRem = a.dueReminders || [];
   const dueFu = a.dueFollowUps || [];
   const staged = a.staged || [];
-  const count = dueRem.length + dueFu.length + staged.length;
+  // Due referral follow-ups are one repeated action, not N decisions: they
+  // collapse into a single batch card here, and the Actions view keeps the
+  // unabridged list. Without this, one busy outreach day floods the grid with
+  // dozens of look-alike cards and buries the decisions that actually need
+  // the candidate.
+  const fuBatch = dueFu.length ? [{
+    kind: "referral follow-ups", cls: "followup", appId: null, jump: "followups",
+    title: dueFu.length + " nudges pending",
+    meta: "sent " + sentRange(dueFu) + " · one nudge each — full list in Actions",
+  }] : [];
+  const decisions = dueRem.length + staged.length + fuBatch.length;
+  const trueTotal = dueRem.length + dueFu.length + staged.length;
 
   const big = $("#bigcount");
-  big.textContent = count
-    ? count + (count === 1 ? " thing needs you" : " things need you")
+  big.textContent = decisions
+    ? decisions + (decisions === 1 ? " thing needs you" : " things need you")
     : "Nothing is blocking";
-  big.classList.toggle("zero", count === 0);
+  big.classList.toggle("zero", decisions === 0);
 
-  $("#subline").textContent = count
+  $("#subline").textContent = decisions
     ? dueRem.length + " overdue · " + dueFu.length + " follow-up" + (dueFu.length === 1 ? "" : "s") + " · " + staged.length + " awaiting your yes"
     : "no overdue decisions, no follow-ups due, nothing staged";
-  $("#actionsCount").textContent = count
-    ? count + (count === 1 ? " thing needs you" : " things need you")
+  $("#actionsCount").textContent = trueTotal
+    ? trueTotal + (trueTotal === 1 ? " item needs you" : " items need you")
     : "Nothing is blocking";
+  const upcoming = (a.upcomingReminders || []).length;
+  $("#actionsSubline").textContent = trueTotal || upcoming
+    ? dueRem.length + " overdue · " + dueFu.length + " follow-ups · " + staged.length + " staged · " + upcoming + " coming up — every item, unabridged"
+    : "every dated decision and follow-up, unabridged";
 
   const railCount = $("#railCount");
-  railCount.textContent = count;
-  railCount.style.display = count ? "" : "none";
+  railCount.textContent = decisions;
+  railCount.style.display = decisions ? "" : "none";
 
   const items = [];
   dueRem.forEach((r) => items.push({
@@ -660,11 +681,7 @@ function renderTriage(a){
     title: r.title,
     meta: "due " + String(r.dueAt).slice(0, 10) + (r.overdueDays ? " · " + r.overdueDays + "d overdue" : "") + (r.note ? " · " + r.note : ""),
   }));
-  dueFu.forEach((m) => items.push({
-    kind: "referral follow-up", cls: "followup", appId: m.appId || null,
-    title: m.target + " · " + m.targetRole,
-    meta: "sent " + String(m.sentAt).slice(0, 10) + " · nudge not sent yet",
-  }));
+  items.push(...fuBatch);
   staged.forEach((s) => items.push({
     kind: "staged", cls: "staged", appId: s.id || null,
     title: s.company + " — " + s.title,
@@ -674,7 +691,10 @@ function renderTriage(a){
   const cards = $("#needcards");
   cards.innerHTML = items.map((it, i) =>
     '<button class="needcard ' + it.cls + '" data-app="' + esc(it.appId || "") + '"' +
-    (it.appId ? ' title="open the application"' : ' title="no application is linked to this yet"') + ">" +
+    (it.jump ? ' data-jump="' + esc(it.jump) + '"' : "") +
+    (it.appId ? ' title="open the application"'
+      : it.jump ? ' title="open the full list in the Actions view"'
+      : ' title="no application is linked to this yet"') + ">" +
       '<span class="top"><span class="kind">' + esc(it.kind) + "</span>" +
       (items.length <= 9 ? "<kbd>" + (i + 1) + "</kbd>" : "") + "</span>" +
       '<span class="title">' + esc(it.title) + "</span>" +
@@ -683,24 +703,25 @@ function renderTriage(a){
   ).join("");
   cards.querySelectorAll(".needcard").forEach((el) => el.addEventListener("click", () => {
     if (el.dataset.app) openApp(el.dataset.app);
+    else if (el.dataset.jump) jumpToGroup(el.dataset.jump);
   }));
 
   const act = $("#actionsBody");
-  if (!items.length && !(a.upcomingReminders || []).length){
+  if (!trueTotal && !upcoming){
     act.innerHTML = '<p class="empty">nothing needs you — no overdue decisions, no follow-ups due, nothing staged ✓</p>';
     return;
   }
-  const group = (heading, rows) => rows.length
-    ? '<div class="actgrp"><h3>' + heading + '</h3><ul>' + rows.join("") + "</ul></div>" : "";
+  const group = (heading, rows, id) => rows.length
+    ? '<div class="actgrp"' + (id ? ' id="grp-' + id + '"' : "") + "><h3>" + heading + '</h3><ul>' + rows.join("") + "</ul></div>" : "";
   act.innerHTML =
     group("Decisions overdue", dueRem.map((r) =>
       '<li><span><span class="overdue">' + esc(r.title) + "</span>" +
       (r.appId ? appTag(r.appId) : "") + (r.note ? '<br><span style="color:var(--muted)">' + esc(r.note) + "</span>" : "") +
       '</span><span class="when">due ' + esc(String(r.dueAt).slice(0, 10)) +
       (r.overdueDays ? " · " + r.overdueDays + "d overdue" : "") + "</span></li>")) +
-    group("Referral follow-ups due (the one nudge)", dueFu.map((m) =>
+    group("Referral follow-ups due (the one nudge) — " + dueFu.length, dueFu.map((m) =>
       "<li><span>" + esc(m.target) + " · " + esc(m.targetRole) +
-      (m.appId ? appTag(m.appId) : "") + '</span><span class="when">sent ' + esc(String(m.sentAt).slice(0, 10)) + "</span></li>")) +
+      (m.appId ? appTag(m.appId) : "") + '</span><span class="when">sent ' + esc(String(m.sentAt).slice(0, 10)) + "</span></li>"), "followups") +
     group("Staged — awaiting your submit yes", staged.map((s) =>
       '<li><span>' + esc(s.company) + " — " + esc(s.title) + appTag(s.id) +
       '</span><span class="when">not yet submitted</span></li>')) +
@@ -708,6 +729,25 @@ function renderTriage(a){
       "<li><span>" + esc(r.title) + (r.appId ? appTag(r.appId) : "") +
       '</span><span class="when">due ' + esc(String(r.dueAt).slice(0, 10)) + "</span></li>"));
   bindAppTags(act);
+}
+
+// "Oct 1" or "Oct 1 – Oct 5" — the span a batch of sends went out in.
+function sentRange(msgs){
+  const times = msgs.map((m) => Date.parse(m.sentAt)).filter((t) => !Number.isNaN(t)).sort((x, y) => x - y);
+  const fmt = (t) => new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (!times.length) return "an unknown date";
+  return times[0] === times[times.length - 1] ? fmt(times[0]) : fmt(times[0]) + " – " + fmt(times[times.length - 1]);
+}
+
+// The follow-up batch card has no single application behind it — it points at
+// the unabridged group in the Actions view instead.
+function jumpToGroup(id){
+  showView("actions");
+  const g = document.getElementById("grp-" + id);
+  if (!g) return;
+  g.scrollIntoView({ behavior: "smooth", block: "start" });
+  g.classList.add("flash");
+  setTimeout(() => g.classList.remove("flash"), 1600);
 }
 
 const STATUS_ORDER = ["discovered","matched","tailoring","ready","submitted","interviewing","offer","rejected","closed"];

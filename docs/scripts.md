@@ -224,10 +224,13 @@ single follow-up the playbook allows (4–5 days after each send), and replies.
 
 Records live in `workspace/outreach/<id>.json` (personal, gitignored). Messages
 logged with `--app <appId>` count as that application's referral trail: the
-review UI shows a `refs N` / `no ref` badge on every board card plus the full
+review UI shows a `refs N` / `no ref` badge on cards that have outreach logged
+(cards with none stay clean — the badge never renders for them) plus the full
 outreach list on the application sheet, and `pipeline` / `app show` carry the
 same status — so at any moment it is clear which roles have a referral in
-motion and which do not.
+motion and which do not. In the review UI's needs-you panel, due follow-ups
+collapse into one batch card (count + sent-date span, clicking it jumps to the
+list); the per-person list lives, unabridged, in the Actions view.
 
 ## Reminders (dated decisions that must resurface)
 
