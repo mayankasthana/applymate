@@ -470,6 +470,48 @@ test("artifact endpoint serves evidence screenshots with an image content-type",
   });
 });
 
+test("html artifacts render as pages, sandboxed away from the UI origin", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const dir = join(services.paths.applications, "app-x", "evidence");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "jd-snapshot.html"), "<html><body><h1>JD page</h1><script>fetch('/api/state')</script></body></html>");
+
+    const res = await fetch(base + "/api/artifact?path=" + encodeURIComponent("applications/app-x/evidence/jd-snapshot.html"));
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /^text\/html/);
+    assert.equal(res.headers.get("content-security-policy"), "sandbox");
+    const html = await res.text();
+    assert.ok(html.includes("<h1>JD page</h1>"), "served raw, not escaped into a <pre>");
+    assert.ok(html.includes('name="color-scheme"'), "light-canvas hint injected for dark-mode review browsers");
+  });
+});
+
+test("raw email evidence renders as a mail viewer, not a markdown blob", async () => {
+  await withServer(async ({ base, config }) => {
+    const services = makeServices(config);
+    const dir = join(services.paths.applications, "app-x", "evidence");
+    await mkdir(dir, { recursive: true });
+    const email = [
+      "Delivered-To: mayank@example.com",
+      "Received: by mx.google.com with SMTP id abc;",
+      "From: Acme HR <no-reply@example.com>",
+      "To: mayank@example.com",
+      "Subject: Your job application status",
+      "Content-type: text/plain; charset=utf-8",
+      "",
+      "We are moving forward with other candidates.",
+    ].join("\n");
+    await writeFile(join(dir, "20261006T080604-rejection-email-kpr0.txt"), email);
+
+    const res = await fetch(base + "/api/artifact?path=" + encodeURIComponent("applications/app-x/evidence/20261006T080604-rejection-email-kpr0.txt"));
+    const html = await res.text();
+    assert.ok(html.includes("Your job application status"), "subject surfaces in the header card");
+    assert.ok(html.includes("We are moving forward with other candidates."), "body renders");
+    assert.ok(html.includes("<details>"), "raw headers stay on the page");
+  });
+});
+
 test("discard endpoint closes an application and keeps it visible on the board", async () => {
   await withServer(async ({ base, config }) => {
     const services = makeServices(config);

@@ -126,6 +126,7 @@ export function renderDocument(markdown: string, { title = "Document" }: { title
 <title>${escapeHtml(title)}</title>
 <style>
   :root { color-scheme: light; }
+  html { background: #fff; }
   body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
          max-width: 52rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; color: #1a202c; }
   h1, h2, h3, h4 { line-height: 1.25; margin: 1.6em 0 0.5em; }

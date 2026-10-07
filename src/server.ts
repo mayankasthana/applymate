@@ -6,6 +6,7 @@ import type { Config } from "./config.ts";
 import { makeServices, type Services } from "./workspace.ts";
 import { UI_HTML } from "./server-ui.ts";
 import { renderDocument, escapeHtml } from "./services/markdown.ts";
+import { looksLikeRfc822, renderEmailHtml } from "./services/email.ts";
 import { loadDossierIndex } from "./services/dossier.ts";
 import { scoreMatch } from "./services/matcher.ts";
 import { stagedWait, withState, type OutreachView } from "./services/outreach.ts";
@@ -23,6 +24,7 @@ const BINARY_TYPES: Record<string, string> = {
   ".gif": "image/gif",
   ".pdf": "application/pdf",
 };
+const HTML_TYPES = new Set([".html", ".htm"]);
 
 /**
  * The local chat/review UI (lavish-axi style): a single-page app served on
@@ -229,14 +231,37 @@ async function serveArtifact(res: ServerResponse, services: Services, rel: strin
   } catch {
     return sendJson(res, 404, { error: `no such artifact: ${rel}` });
   }
-  const mime = BINARY_TYPES[extname(target).toLowerCase()];
+  const ext = extname(target).toLowerCase();
+  const mime = BINARY_TYPES[ext];
   if (mime) {
     res.writeHead(200, { "content-type": mime });
     res.end(content);
     return;
   }
+  // Saved pages (JD snapshots, email HTML) are untrusted: they open in a
+  // CSP-sandboxed document — renders statically, but its scripts never run
+  // and it can never reach back into this UI's API.
+  if (HTML_TYPES.has(ext)) {
+    // Saved pages often declare no background, and the review browser may run
+    // dark mode — an unstyled page would render dark-on-dark. The hint goes
+    // in first, so the page's own CSS (later in the cascade) still wins.
+    const lightHint = '<meta name="color-scheme" content="light"><style>html{background:#fff}</style>';
+    const source = content.toString("utf8");
+    const head = source.match(/<head(\s[^>]*)?>/i);
+    const rendered = head ? source.replace(head[0], head[0] + lightHint) : lightHint + source;
+    res.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy": "sandbox",
+    });
+    res.end(rendered);
+    return;
+  }
   const text = content.toString("utf8");
-  if (RENDERABLE.test(extname(target)) || RENDERABLE.test(target)) {
+  // Raw RFC-822 email evidence gets a mail viewer, not the markdown renderer.
+  if (ext === ".eml" || looksLikeRfc822(text)) {
+    return sendHtml(res, 200, renderEmailHtml(text, { title: rel }));
+  }
+  if (RENDERABLE.test(ext) || RENDERABLE.test(target)) {
     return sendHtml(res, 200, renderDocument(text, { title: rel }));
   }
   return sendHtml(res, 200, `<pre>${escapeHtml(text)}</pre>`);
