@@ -486,6 +486,27 @@ Disclosures → Review → Submit). Every finding below is from this one flow.
    Note the table's "Date Submitted" renders the tenant's US-Central calendar date,
    which can differ from the candidate's local date near midnight.
 
+### A programmatic scrub desyncs the framework even through the native setter (verified 2026-10-07, Eli Lilly R-112348)
+
+- Refines the "swap `"` → `'` in every parsed description" rule above: **how** the swap is
+  committed matters. A scrub applied with the React-safe native value setter
+  (`Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set`) plus
+  synthetic `input`/`change` events left the DOM clean but the **framework value stale** —
+  Save failed with "Contains illegal characters" on exactly the three scrubbed textareas
+  while a DOM read-back showed zero illegal chars. Validation reads framework state, not
+  the DOM (the JioStar lesson, now confirmed for the scrub path).
+- Working fix: trusted keystrokes only — click the textarea, `locator.evaluate(el => el.select())`,
+  `locator.type(text, { delay: 0 })` (a 2,500-char retype at delay 0 lands instantly), then
+  `Tab`. Retyping the already-clean DOM text committed to the framework and the save passed.
+- The free-text "total salary expectation" question on this tenant renders as a **visible
+  `textarea#primaryQuestionnaire--<hash>`** (704×64) — the same id family as the dropdown
+  *buttons* — so a search for `input` finds only 0×0 template elements. Enumerate TEXTAREA
+  and INPUT with widths before concluding a field is missing.
+- Question `group` accessible names do **not** always come from an `aria-label` attribute
+  (some groups are labelled by their inner paragraph). `getByRole('group', { name })` resolves
+  them correctly where `getAttribute('aria-label')` matching returns nothing; match groups by
+  role, not by attribute.
+
 ### Resume-parsed descriptions carry the PDF's hard line-wraps (verified 2026-10-06)
 
 - The parser copies the resume PDF's ~100-char visual line breaks into Role Description
