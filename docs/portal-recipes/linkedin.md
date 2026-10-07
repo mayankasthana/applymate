@@ -1138,3 +1138,34 @@ Bonus: the top card's **Apply** anchor carries the canonical ATS URL (Workday
 description never loads. Harvest `a[href*="safety/go"]`, decode the
 `url=` parameter, and fetch the JD from the ATS API (cxs / boards-api /
 smartrecruiters API) instead of fighting the LinkedIn page at all.
+
+## The InMail-accept send confirms LATE — do not double-send during the lag (verified 2026-10-07)
+
+**Goal:** reply on an inbound InMail via the custom-reply composer and *know* it went.
+
+**What happened:** on one accept-send, the hover-travel click was eaten (known), and the
+evaluate-dispatch fallback — the documented working path — appeared to do nothing: after a
+3 s wait the thread showed no `Candidate Name sent the following message` marker, the
+accept button was still in the DOM, and the quick replies were still present. Two more
+send attempts were prepared on the strength of that read (a retype via `cua.type`). The
+message then surfaced in the thread **sent exactly once, from the first evaluate-dispatch**
+— the confirmation simply lagged well past 3 s (the marker, the button removal and the
+quick-reply removal all landed together, late).
+
+**The rule:** after dispatching the accept button, treat "nothing changed at 3 s" as
+**unconfirmed**, not failed. Re-poll the thread-marker/quick-reply state for ~10 s before
+attempting any second send — a duplicate InMail reply cannot be unsent. Judge delivery on
+the marker + body text + quick-replies-gone trio, exactly as the compose-length warning
+above says, just with a longer window.
+
+**Two more mechanics from the same thread:**
+
+- The `Edit reply…` textarea can **lose its aria-label** after programmatic
+  focus/select/insertText — `getByRole('textbox', { name: 'Edit reply…' })` then finds
+  nothing and looks like the composer vanished. Locate it by content instead
+  (`textarea` whose `.value` contains a draft substring) and re-read `.value` before any
+  send attempt.
+- A coordinate click aimed at that textarea during the confirmation lag can dismiss the
+  custom-reply composer outright (click landed, activeElement fell back to BODY, draft
+  textarea gone). Re-observe before every step; if the composer state doesn't match what
+  the recipe says it should be, stop and read the thread state before touching anything.
