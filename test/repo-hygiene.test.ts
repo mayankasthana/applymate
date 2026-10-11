@@ -88,6 +88,8 @@ test("no file embeds a real-looking personal email", async (t) => {
       continue;
     }
     for (const m of text.matchAll(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)) {
+      // RFC 2606/6761 reserve these TLDs for docs and tests — safe by construction.
+      if (/\.(example|invalid|test|localhost)$/i.test(m[0])) continue;
       if (/@(example\.(com|org|net)|localhost|users\.noreply\.github\.com)\b/.test(m[0])) continue;
       if (file === "package-lock.json") continue;
       offenders.push(`${file}: ${m[0]}`);
