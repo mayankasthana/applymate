@@ -62,3 +62,4 @@ Each entry in a domain file carries:
 - **Append, don't fork.** Same domain already has a file? Merge the new
   trick into it and dedupe. An apparent contradiction means re-verify and
   correct the old entry — not a second competing one.
+| [goldman-sachs.md](goldman-sachs.md) | higher.gs.com — search commits only via native in-page click, URL-scheme location filter, JD reading past the boilerplate, L2 = generic cross-team reqs | 2026-10-12 |
