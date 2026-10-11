@@ -115,6 +115,18 @@ test("naming an employer the candidate worked for is not flagged", () => {
   assert.ok(!rules(md, "Nimbus Data Systems").includes("target-company-named"));
 });
 
+test("a target company of three letters must not substring-match inside a longer word", () => {
+  // Regression: `Arm` matched inside `warm`, so every honest resume with a
+  // warm cache failed the gate when the target company was Arm.
+  const md = CLEAN.replace("- Shipped a Go inference service at ~18,000 req/s.", "- Cut the client call from ~35 ms to 1.7 ms warm.");
+  assert.ok(!rules(md, "Arm").includes("target-company-named"));
+});
+
+test("the target company is still caught mid-prose at word boundaries", () => {
+  const md = CLEAN.replace("- Shipped a Go inference service at ~18,000 req/s.", "- Built the control plane for the Arm AI platform.");
+  assert.ok(rules(md, "Arm").includes("target-company-named"));
+});
+
 test("summary and body length are advisory, not blocking", () => {
   const long = CLEAN.replace(
     "Principal engineer, 14 years, ads data platform at 100M+ user consumer apps.",

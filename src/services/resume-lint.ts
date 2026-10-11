@@ -335,10 +335,13 @@ function targetCompanyFindings(md: string, company: string): LintFinding[] {
   if (ownEmployers.has(needle)) return [];
 
   const lines = md.split("\n");
+  // Word-bounded: a 3-letter company name (Arm) must not match inside a
+  // longer word (warm, swarm), while still catching it mid-prose.
+  const pattern = new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
     if (headingLevel(line) > 0) continue;
-    if (normalizeCompany(line).includes(needle)) {
+    if (pattern.test(normalizeCompany(line))) {
       return [finding(`line ${i + 1} names the target company "${company}"`)];
     }
   }
