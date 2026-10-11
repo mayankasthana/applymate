@@ -11,6 +11,8 @@
  * Learn and Settings entries are deliberately inert, because those run in the
  * CLI and have no API surface to back a view.
  */
+import { linkifyChatHtml } from "./services/linkify.ts";
+
 export const UI_HTML = `<!doctype html>
 <html lang="en" data-theme="cockpit">
 <head>
@@ -36,7 +38,7 @@ export const UI_HTML = `<!doctype html>
     -webkit-font-smoothing: antialiased;
   }
   *, *::before, *::after { min-width: 0; }
-  p, h1, h2, h3, h4, li, dd, dt, td, th, span, label, button, kbd, pre {
+  p, h1, h2, h3, h4, li, dd, dt, td, th, span, label, button, kbd, pre, a {
     overflow-wrap: anywhere;
   }
   img, svg { max-width: 100%; height: auto; }
@@ -491,6 +493,22 @@ const $ = (s) => document.querySelector(s);
 let lastId = 0;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"\\""}[c]));
 
+// Injected from src/services/linkify.ts — chat text turns into links there
+// (URLs, workspace file paths, known application ids). The source is embedded
+// verbatim, so that module must stay free of backticks, template-literal
+// syntax, and script-closing markup. test/linkify.test.ts enforces it.
+${linkifyChatHtml}
+
+// The application ids the board currently knows: chat mentions of an id only
+// become an open-button when the board can actually open it. Rebuilt on every
+// board fetch; when the set grows, the chat log is redrawn once so mentions
+// that rendered as plain text (the board had not caught up yet) become their
+// buttons too.
+let knownApps = {};
+let appsSig = "";
+let redrawChat = false;
+let chatMsgs = [];
+
 async function jget(u){ return (await fetch(u)).json(); }
 async function jpost(u, body){ return (await fetch(u, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body)})).json(); }
 
@@ -775,6 +793,14 @@ async function refreshBoard(){
     if (!m.appId) continue;
     (outreachByApp[m.appId] = outreachByApp[m.appId] || []).push(m);
   }
+  // The set of applications the board can open — chat mentions of an id only
+  // turn into open-buttons once it is here. A changed set queues one chat-log
+  // redraw so earlier plain-text mentions get their buttons.
+  const ids = {};
+  for (const s of Object.keys(state.pipeline || {}))
+    for (const c of (state.pipeline[s] || [])) ids[c.id] = true;
+  const sig = Object.keys(ids).sort().join(",");
+  if (sig !== appsSig){ appsSig = sig; knownApps = ids; redrawChat = true; }
   renderTriage(state.actions || {});
   floorInfo = state.floor || null;
   $("#floorHint").textContent = floorInfo
@@ -978,14 +1004,32 @@ $("#overlay").addEventListener("click", (e) => {
 function bubble(m){
   const div = document.createElement("div");
   div.className = "bubble " + m.from;
-  div.innerHTML = '<span class="who">' + esc(m.from) + "</span>" + esc(m.text);
+  div.innerHTML = '<span class="who">' + esc(m.from) + "</span>" + linkifyChatHtml(m.text, Object.keys(knownApps));
   return div;
 }
 async function refreshChat(){
   const msgs = await jget("/api/chat?since=" + lastId);
   const log = $("#chatlog");
   let grew = false;
-  for (const m of msgs){ log.appendChild(bubble(m)); lastId = Math.max(lastId, m.id); grew = true; }
+  if (msgs.length){
+    for (const m of msgs){ chatMsgs.push(m); lastId = Math.max(lastId, m.id); }
+    grew = true;
+  }
+  if (redrawChat){
+    // The board just learned application ids it did not know when earlier
+    // bubbles rendered: redraw the log once, so chat mentions of those ids
+    // become their open-buttons too. The log was just cleared, so every
+    // button in it is new and gets bound exactly once.
+    redrawChat = false;
+    log.innerHTML = "";
+    for (const m of chatMsgs) log.appendChild(bubble(m));
+    bindAppTags(log);
+    grew = true;
+  } else if (msgs.length){
+    // bind per bubble: the log also holds buttons from earlier renders and
+    // they must not get a second click handler
+    for (const m of msgs){ const b = bubble(m); log.appendChild(b); bindAppTags(b); }
+  }
   if (grew) log.scrollTop = log.scrollHeight;
 }
 
