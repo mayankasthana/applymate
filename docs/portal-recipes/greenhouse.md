@@ -249,6 +249,40 @@ Security Engineering)", but the board payload puts that req in **Seoul, South
 Korea**. Trust the structured `location.name` from the API over the rendered
 listing card when the two conflict.
 
+## The file inputs swap out from under you after the first attach (verified 2026-10-12, Deliveroo)
+
+**Goal:** attach resume AND cover letter on a tenant whose form has both
+(`job-boards.greenhouse.io/deliveroo/jobs/8202442` — the `/apply` URL 404'd with
+"the job board you were viewing is no longer active" while the posting page
+returned 200 and carried the form behind its own Apply button; the posting page
+is the apply page here).
+
+**Naive approach fails:** query both `input[type="file"]` elements (ids `resume`
+and `cover_letter`), DataTransfer one file onto each. After the first
+`change` event, Greenhouse **re-renders and removes the consumed input** — the
+second lookup returns null, and worse, the single change event can land the file
+in BOTH groups (both chips showed the cover letter). A blind second attach then
+throws on a null input and looks like a selector bug.
+
+**Working path:**
+
+1. Attach one file, wait ~1.5s, re-enumerate `input[type="file"]` — expect the
+   consumed group's input to be gone and a chip (`paragraph <filename>` +
+   `button "Remove file"`) in its place.
+2. If the wrong file landed in a group, click that group's `Remove file` (first
+   matching button = the topmost group, Resume/CV). The removed group's input
+   reappears in the DOM, empty. DataTransfer the right file onto it by id.
+3. Verify by chips, not by inputs: each group must show its own
+   `paragraph <filename>`. Attach the resume LAST anyway (this tenant's upload
+   shows a `progressbar` while Greenhouse processes the file — wait for the
+   chip to replace it before submitting).
+4. The India-tenant demographic survey (`India - Self-Identification Survey`)
+   is entirely voluntary with its own consent toggle — leaving it untouched is
+   a valid state; its trailing consent checkbox is only for answered questions.
+5. Submit via `evaluate` `btn.click()` after `scrollIntoView`; success navigates
+   to `/confirmation` ("Thank you for applying. Your application has been
+   received."). No confirmation number; the URL + screenshot are the proof.
+
 **Verified:** 2026-10-05, Coupang board token `coupang`, 688 reqs, 39
 India-located, 16 captured and re-scored clean.
 

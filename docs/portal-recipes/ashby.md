@@ -116,3 +116,48 @@ re-checking fields. Ashby shows no confirmation number.
 race, veteran status) are explicitly optional and marked `required=false`. Set
 only what's a known candidate fact (e.g. gender); leave the rest blank rather
 than selecting "Decline to self-identify" on the candidate's behalf.
+
+## Validation reads React state, not the DOM — and locator clicks time out (verified 2026-10-12, Harvey)
+
+**Goal:** submit a fully filled form (verified 2026-10-12, Harvey tenant, end to end).
+
+**Naive approach fails in three ways:**
+
+1. **Locator `.fill()` can leave values the form state never sees.** On the Harvey
+   form, eight of nine text fields registered through `locator.fill()`, but the
+   phone field read back correct in the DOM (`el.value` right, audit clean) yet
+   submit reported "Missing entry for required field: Phone Number". Ashby
+   validates its React/store state, not the inputs. A DOM audit therefore does
+   NOT clear a field for submit — the only real test is submitting and reading
+   the correction alert.
+2. **Synthetic events don't reach the state either.** Native value setter +
+   `input`/`change`/`blur`, plus driving the fiber's `memoizedProps.onChange`
+   with a hand-built event, all left the DOM right and the state untouched (the
+   fiber call needs `preventDefault` on the fake event or it throws — and even
+   then nothing registers).
+3. **Playwright locator clicks time out on Ashby buttons** (`Submit Application`,
+   radio inputs, options) even when the element is visible and enabled — same
+   failure class as the Qualcomm Eightfold drawer. `locator.click()` on them
+   burns the 3s budget and dies.
+
+**Working path — trusted input through CUA coordinates:**
+
+1. Get element rects via `evaluate` (`getBoundingClientRect` center). `cua.click`
+   the phone field, `setSelectionRange(0, len)` via evaluate to select the stale
+   text, then `cua.type` the replacement — real keystrokes over a real selection
+   replace it and DO register. (`cua.keypress Meta+a` did not select; browser
+   select-all shortcuts don't reach the field.)
+2. The consent checkbox and both radio groups register through `cua.click` on
+   their coordinates too (a real click toggles the real control — it can toggle
+   an already-checked box OFF, so read back and click again if needed).
+3. Submit by `cua.click` on the Submit Application button's coordinates.
+4. Success: the tabpanel is replaced by `status: "Success" — Your application was
+   successfully submitted. We'll contact you if there are next steps.` URL
+   unchanged, no confirmation number. If instead an `alert "Your form needs
+   corrections"` renders, its buttons name the offending fields — fix those and
+   resubmit; the alert is regenerated fresh on every attempt.
+5. A failed submit does NOT wipe the attachments — the resume filename chip
+   survived all three submit attempts.
+
+The file upload itself still lands via the DataTransfer/fiber path from the Trail
+entry above — only *state-carrying text/choice fields* need the trusted-input path.
