@@ -67,3 +67,53 @@ GET https://<host>/hcmRestApi/resources/latest/recruitingCEJobRequisitions
 
 Verified: 2026-10-07 (search endpoint ×3, posting pages ×3, screenshots ×2
 after the recovery dance).
+
+## Session resets, OTP, attachments, and the step-3 parse (2026-10-13, app flow #2)
+
+Learned on the Lead SWE 210787312 apply flow; extends the Sep 28 entries.
+
+- **Sessions die aggressively** (~minutes of wall-clock, activity or not). A
+  "Continue Working / Discard" dialog appears; once dead, Continue Working
+  does nothing — the flow resets to the posting page. Re-entry is cheap and
+  answer data persists server-side keyed to the email: Apply Now → email gate
+  → NEXT → OTP → VERIFY → NEXT through the carried steps. Budget 60-90s per
+  re-entry. The address block may come back EMPTY on a fresh session even when
+  the questions carried — refill from stored answers.
+- **OTP**: arrives from `eino.fa.sender@workflow.mail.us2.cloud.oracle.com`,
+  subject "Take action to confirm your identity", a 6-digit code. The gate
+  renders six `input#pin-code-1..6` boxes that auto-advance — focus box 1,
+  `cua.click`, then `cua.type` the whole code (locator `fill` only lands one
+  char). Reading the code from the candidate's inbox via read-only IMAP works
+  and keeps the flow unattended (candidate-approved on 2026-10-13).
+- **Honeypot discipline**: the honeypot exists only on the /apply/email screen
+  (its visible label is literally "honeypot"). Email fills select the input
+  whose name/id contains "email" — the honeypot never matches. Never bulk-fill
+  inputs; guard every write with a zero-geometry check. The
+  `g-recaptcha-response` / `h-captcha-response` textareas are standard hidden
+  widget fields — never touch.
+- **Attachments share ONE file input**: each DataTransfer injection fills the
+  currently-open slot; the portal then relabels (a "Drop Cover Letter Here"
+  slot appears). Correct order: inject resume first, wait for "Your resume was
+  changed.", then the letter ("Your cover letter was changed."). If swapped
+  (letter next to REMOVE RESUME), remove BOTH and re-inject in order.
+  A step-1 injection may crash the SPA session without losing the upload —
+  the file lands server-side; re-enter and check the attachment before
+  re-uploading.
+- **Step 3 parses the profile badly**: resume bullet fragments become job
+  titles ("lakehouse: Hive → Delta Lake"), the employer comes out as a
+  sub-brand ("DataForge"), side projects become separate jobs, education Major
+  missing ("Fields to fix: 1"). Fix per entry: each Edit opens a form whose
+  field ids are freshly mounted (employerName-30 → -44 → -53 → -62) — re-read
+  ids on every open; native setter + input/change/blur; SAVE is per-entry
+  (pick the SAVE near the open form). Delete needs no confirmation. Degree and
+  Area of Study accepted free text even with the suggest service dead.
+- **Suggest services can die tenant-wide** (Preferred Location, top-2
+  languages combobox: "No results were found" for every query on 2026-10-13
+  although both worked on Sep 28). Neither blocked NEXT — leave empty unless
+  the review page flags them.
+- **Screenshot surface can hard-timeout (30s) at the final step** after
+  Show More — capture staged-state evidence earlier in the flow; re-activate
+  + retry may still fail.
+- Typeahead fields that DO accept data still commit free text with the native
+  setter + input/change/blur (Degree, Area of Study verified).
+
