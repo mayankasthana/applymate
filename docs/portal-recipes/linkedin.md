@@ -953,6 +953,21 @@ list hides entirely: on this run it surfaced four threads absent from Focused, i
 recruiter pitch for a Staff Data Engineer role and a second agentic-AI InMail. Triage the
 InMail filter on every inbox pass, not just Focused.
 
+## Reading a person's recent posts — profile page + evaluate scroll (verified 2026-10-12)
+
+**Goal:** read someone's last N feed posts (interviewer/company research) from their
+`/in/<handle>/` profile in a logged-in session.
+
+**Naive approach fails:** the feed only renders the first 1–2 posts on load, and
+`tab.cua.scroll` **times out** on this page (30s, no error surfaced to act on).
+
+**Working path:** load the profile, then loop `evaluate(() => window.scrollBy(0, 2200))`
+with ~1.5–2s pauses (3 rounds ≈ 8 posts), and read the **text layer**:
+`(document.querySelector('main') || document.body).innerText`. Post boundaries are easy to
+spot in the text (name + "• 2nd" + headline + relative time per post; "… more" where the
+post is truncated). No snapshot needed — the profile snapshot is heavy and adds nothing
+over the text layer for reading.
+
 ## Reading people-search cards: parse the DOM from `/in/` anchors, not the ARIA snapshot (verified 2026-10-04)
 
 **Goal:** pull a `keywords` + `network=["S"]` people search into structured rows
