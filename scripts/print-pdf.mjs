@@ -25,10 +25,24 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 // 12px = 9pt at 1.3 line-height with 1cm A4 margins: the established house style,
 // and the size at which an eleven-year resume lands on two readable pages.
+// Gutters, Chrome 154 edition (verified 2026-10-12): headless printToPDF now
+// ignores @page margins, ignores the CDP margin params, and ignores
+// preferCSSPageSize combinations — every page printed flush to the edges no
+// matter which knob was set (paperWidth/Height and content CSS still apply).
+// So the gutters are ordinary layout now: a one-column table whose thead/tfoot
+// spacer rows repeat on every printed page (top/bottom gutters — thead/tfoot
+// repetition on fragmentation is standard Blink behavior; the 1-page case is
+// pixel-measured, so any multi-page build still gets its usual visual gate),
+// plus body side padding (left/right gutters). Layout CSS cannot be ignored
+// by print.
 const PRINT_CSS = `
-  @page { margin: 1.0cm 1.05cm; }
+  @page { size: A4; margin: 0; }
+  html, body { background: #fff; }
   body { font: 12px/1.22 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-         max-width: none; padding: 0; }
+         max-width: none; margin: 0; padding: 0 1.05cm; }
+  table.pgwrap { width: 100%; border-collapse: collapse; }
+  table.pgwrap > thead > tr > td, table.pgwrap > tfoot > tr > td { height: 1cm; padding: 0; }
+  table.pgwrap > tbody > tr > td { padding: 0; }
   h1, h2, h3, h4 { line-height: 1.2; margin: 0.6em 0 0.2em; }
   h1 { margin-top: 0; font-size: 1.5em; }
   h2 { font-size: 1.12em; border-bottom: 1px solid #cbd5e0; padding-bottom: 0.1rem; }
@@ -53,7 +67,11 @@ async function writePrintHtml(srcHtml, outHtml, title) {
   const html = await readFile(srcHtml, "utf8");
   const styled = html
     .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
-    .replace("</head>", `<style>${PRINT_CSS}</style>\n</head>`);
+    .replace("</head>", `<style>${PRINT_CSS}</style>\n</head>`)
+    // Wrap the body content in the gutter table (see PRINT_CSS note): thead
+    // and tfoot repeat on every printed page, which body padding cannot do.
+    .replace(/<body([^>]*)>([\s\S]*?)<\/body>/, (_, attrs, inner) =>
+      `<body${attrs}><table class="pgwrap"><thead><tr><td></td></tr></thead><tbody><tr><td>${inner}</td></tr></tbody><tfoot><tr><td></td></tr></tfoot></table></body>`);
   await writeFile(outHtml, styled, "utf8");
 }
 
@@ -207,17 +225,10 @@ async function printToPdf(htmlPath, pdfPath) {
       // The whole point: no header/footer, or the local path and a timestamp
       // get stamped onto every page.
       displayHeaderFooter: false,
-      // The stylesheet's `@page { margin }` still applies and is what sets the
-      // gutters, so the CDP margins stay at zero. `preferCSSPageSize: true`
-      // must stay off: with only a margin declared and no CSS `size`, Chrome
-      // collapsed the whole document onto a single page.
-      preferCSSPageSize: false,
-      paperWidth: 8.27,
-      paperHeight: 11.69,
-      marginTop: 0,
-      marginBottom: 0,
-      marginLeft: 0,
-      marginRight: 0,
+      // Page size comes from the @page rule (size: A4). Margins are NOT set
+      // here in any form — Chrome 154 headless ignores every margin knob (see
+      // the PRINT_CSS note); gutters are layout CSS instead.
+      preferCSSPageSize: true,
     });
 
     const buf = Buffer.from(data, "base64");
