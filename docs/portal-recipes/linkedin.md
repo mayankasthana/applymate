@@ -70,6 +70,25 @@ Enter are ignored by the overlay's React handler.
   timestamp is the one just sent. The attachment bubble
   (`PDF <name> 263 KB Download`) is the strongest single signal that a
   text+attachment message actually left the composer.
+- **InMail composer: the Send button is icon-only** (verified 2026-10-13, InMail
+  to a 3rd-degree recruiter, subject + body, 1/1 delivered): in the Premium
+  InMail form the send button carries **no aria-label and empty innerText**, so
+  the `/Send/` text filter above matches **0** buttons and the dispatch throws.
+  The button is still `type="submit"`, just class-tagged instead of labelled —
+  target it directly and skip the text filter:
+  ```js
+  const btn = document.querySelector('button.msg-form__send-btn[type="submit"]');
+  if (!btn) throw new Error('send btn not found');
+  btn.click();
+  ```
+  One `btn.click()` dispatched cleanly (no hover-travel needed, no eaten click).
+  InMail marker renders as "sent the following message**s** at <time>" (plural) —
+  regexes expecting the singular form still match via prefix. After the send the
+  composer unmounts entirely (`querySelector` → null, send button "gone"): that
+  is the cleared-compose signal, not an error. Also note the `/messaging/compose/`
+  deep-link URL does not survive the send — the tab lands on
+  `/messaging/thread/<id>/`, so tab-matching by the compose URL fails after a
+  successful send; match by thread URL instead.
 
 **Opening a different conversation in the inbox (verified 2026-10-01, 3/3):**
 the conversation-list card is a `div.msg-conversation-listitem__link[tabindex=0]`
