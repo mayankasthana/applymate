@@ -27,6 +27,7 @@ employers share an ATS, so a `workday.md` recipe serves every Workday tenant:
 | [deshawindia.md](deshawindia.md) | deshawindia.com careers — the counter lies (all category cards are in the DOM), category dropdown ignores locator clicks (evaluate-dispatched clicks; last-match wins over nav links), JD body slicing, no pay info on the site | 2026-10-04 |
 | [eightfold-careers.md](eightfold-careers.md) | Eightfold `careers.<company>.com` boards — country-facet-then-search (the keyword box is semantic and the LOCATION box self-fills), hidden facet checkboxes, per-job liveness fields | 2026-10-02 |
 | [greenhouse.md](greenhouse.md) | greenhouse.io job boards — typeahead flyout fields, chip-selection verification, DataTransfer resume upload, submit/confirmation flow | 2026-10-01 |
+| [goldman-sachs.md](goldman-sachs.md) | higher.gs.com — search commits only via native in-page click, URL-scheme location filter, JD reading past the boilerplate, L2 = generic cross-team reqs | 2026-10-12 |
 | [gmail.md](gmail.md) | mail.google.com — read-only IMAP via app password, confirming vs knock-out rejection classification; composing and sending with attachments via DataTransfer injection + loopback byte server | 2026-10-02 |
 | [icims.md](icims.md) | icims.com — iframe traversal (`icims_content_iframe`), GDPR/hCaptcha handling, candidate profile updates, verification | 2026-10-01 |
 | [keka.md](keka.md) | `<tenant>.keka.com` careers — jobdetails→applyjob flow, resume-autofill trap (audit every field), bare-id vs dotted-name field map, Angular widget events, the candidate-owned captcha | 2026-10-12 |
@@ -36,7 +37,7 @@ employers share an ATS, so a `workday.md` recipe serves every Workday tenant:
 | [phenom.md](phenom.md) | Phenom "pcsx" apply portals and public job boards (jobs.autodesk.com, jobs.twilio.com et al.) — resume upload, reload behavior, click fallbacks, search/facet UI | 2026-10-01 |
 | [smartrecruiters.md](smartrecruiters.md) | api.smartrecruiters.com — reading a posting's JD without a browser, board search to liveness-check an aggregator link, the `jobAd.sections` dict shape | 2026-10-02 |
 | [stripe.md](stripe.md) | stripe.com/careers — reading a posting + liveness (apply link), sidebar Office location field, the EU-applicant-notice tell, the 100%-in-office boilerlist trap, searching by function to find a location-clean sibling req, and the Greenhouse apply embed (iframe won't attach — open the src directly; react-aria zero-size search inputs) | 2026-10-03 |
-| [workday.md](workday.md) | Workday recruiting (myworkdaysite.com) and public careers boards (myworkdayjobs.com) — apply-flow URLs, shadow-DOM form filling, account-creation recovery, duplicate-application detection, the `wday/cxs` JSON endpoint for reading a JD with no browser, and the `jobs` POST endpoint for bulk-sweeping a country | 2026-10-03 |
+| [workday.md](workday.md) | Workday recruiting (myworkdaysite.com) and public careers boards (myworkdayjobs.com) — apply-flow URLs, shadow-DOM form filling, account-creation recovery, duplicate-application detection, the `wday/cxs` JSON endpoint for reading a JD with no browser, and the `jobs` POST endpoint for bulk-sweeping a country (Mastercard: limit-100 400s, HTML JDs must be stripped before scoring) | 2026-10-14 |
 
 ## Recipe format
 
@@ -63,4 +64,3 @@ Each entry in a domain file carries:
 - **Append, don't fork.** Same domain already has a file? Merge the new
   trick into it and dedupe. An apparent contradiction means re-verify and
   correct the old entry — not a second competing one.
-| [goldman-sachs.md](goldman-sachs.md) | higher.gs.com — search commits only via native in-page click, URL-scheme location filter, JD reading past the boilerplate, L2 = generic cross-team reqs | 2026-10-12 |

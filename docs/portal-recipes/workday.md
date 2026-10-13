@@ -524,3 +524,28 @@ Disclosures → Review → Submit). Every finding below is from this one flow.
   section boundaries, then apply the illegal-character scrub. Keep a clean-text copy of
   every submitted application's role descriptions next to the artifacts so the next
   fill starts clean.
+
+## Mastercard tenant `mastercard.wd1.myworkdayjobs.com/CorporateCareers` (verified 2026-10-14)
+
+- **cxs works on both shapes.** `POST /wday/cxs/mastercard/CorporateCareers/jobs` (search) and
+  `GET /wday/cxs/mastercard/CorporateCareers<externalPath>` (JD) both answered 200 from curl.
+  Hostname-first-label tenant rule holds (`mastercard`, site `CorporateCareers`).
+- **`limit: 100` is rejected here — HTTP_400.** The Lilly note ("limit above 20 works") does not
+  carry over. `limit: 20` paginates cleanly: 14 pages covered the 262-hit result set.
+- **`searchText: "India"` matches loosely** — Dublin/Singapore/Nairobi reqs appear in the hits
+  (`locationsText` carries `2 Locations` for multi-country reqs). Filter on `India` appearing in
+  `locationsText` client-side; `appliedFacets: {"locationCountry": ["India"]}` returns HTTP_400
+  (wrong facet key for this tenant; correct key unknown).
+- **`jobPostingInfo.jobDescription` is raw HTML with `<p style="...">` wrappers** — same as Lilly.
+  Extra finding: feeding that raw HTML into a keyword matcher poisons the term profile — the
+  scorer matched `style` (13), `amp` (10), `inherit` (7), `br`, `h3`, `li` as top terms and
+  deflated coverage. A JD that scored 56 raw scored **80** after stripping tags to plain text
+  (`<br>`/`</p>` → newlines, `<li>` → bullets, unescape entities). **Always clean the HTML before
+  storing or scoring a JD captured from cxs.**
+- **Evidence on this tenant:** `--kind jd-snapshot` with the (cleaned) JD as HTML is the working
+  capture; page screenshots untested (site carries OneTrust banner + chatbot overlays like the
+  Phenom family). Each posting's `startDate` gives the posted date — an Authorization Decisioning
+  req posted 2026-03-23 showed how stale evergreen reqs look next to same-week ones; sort/filter on it.
+- Scale note: 246 of 262 `searchText: India` hits were India-located; 171 engineering-titled.
+  Ladder observed in titles: Software Engineer I/II → Senior → Lead (≈Staff) → Principal →
+  Manager/Director/VP (people track).
