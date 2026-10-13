@@ -134,3 +134,20 @@ aggregator turned out to be correct — but only because the source board was op
 and checked. Aggregator pages carry no liveness signal: postings there outlive their
 req by weeks. Per the standing `livenesscheck` preference, always resolve to the
 company's own board before any portal work.
+
+## Applied Materials: the `pid=` search URL renders the JD detail inline
+
+**Goal:** open a job handed over as a careers-site search URL
+(`careers.appliedmaterials.com/careers?domain=appliedmaterials.com&location=…&pid=790318590134&…`).
+
+**Working path:** navigate to that URL as-is — no need to derive a
+`/careers/job/<pid>` form. The board renders with the matching job's detail
+section appended in the page (title, `Job description`, `Job ID`, quals,
+`Apply Now`), so one `document.body.innerText` read captures the full JD and
+the job cards above it. As on Qualcomm, the authoritative on-page **Job ID**
+(R2626226) is distinct from the URL `pid` (790318590134) — cite the on-page
+one. Cookie banner is OneTrust: clicking the reject/accept button then
+removing `#onetrust-consent-sdk` clears it, and a `fullPage` screenshot
+succeeds on this tenant (no capture timeout).
+
+**Verified:** 2026-10-14, careers.appliedmaterials.com, req R2626226.
