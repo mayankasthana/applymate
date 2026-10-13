@@ -549,3 +549,43 @@ Disclosures → Review → Submit). Every finding below is from this one flow.
 - Scale note: 246 of 262 `searchText: India` hits were India-located; 171 engineering-titled.
   Ladder observed in titles: Software Engineer I/II → Senior → Lead (≈Staff) → Principal →
   Manager/Director/VP (people track).
+
+## Work-experience From/To date spinners share the DOB dead-widget class (verified 2026-10-14, JioStar tenant)
+
+- Goal: set or correct a work-experience From/To date (`dateSectionMonth-input` / `dateSectionYear-input`,
+  `tabindex="-1"`) in the My Experience step.
+- These are the same widget class as the DOB segments above. Every input channel fails, and worse
+  than dead — deceptive:
+  - `cua.click` on the field lands (focus verifies via `document.activeElement`), `cua.type` writes a
+    value into the DOM, but the underlying react state keeps the old value and **reverts the visible
+    text on the next render** (typed `4` read back as committed `4/YYYY`, showed `12/YYYY` a minute later).
+  - `dom_cua.click` + `dom_cua.type` on the node_id scattered digits across the month/year pair.
+  - Locator `press` per the text-input entry: dead. Calendar button opens zero `[role="gridcell"]`.
+  - `ARROWUP`/`ARROWRIGHT` on the spinner: no effect.
+- Values originally enter these fields only via resume-parse / Use My Last Application prefill.
+- Working path: hand the date fields to the candidate; pre-fill every text field of the block first
+  so the human touch is dates only (5 numbers took the candidate ~1 minute). If a correction is needed,
+  have the human type it; do not try to restore values by automation.
+
+## Draft resume, session resets, and what actually persists (verified 2026-10-14, JioStar tenant)
+
+- Resume an abandoned draft via Candidate Home → My Applications → the row's kebab
+  (`[data-automation-id="actionMenuTarget"]`, opened by coordinate click — Playwright click on it
+  times out) → **Continue Application**. The flow re-enters at step 1.
+- What survives in the server-side draft: My Information, My Experience (entries, descriptions,
+  attachments), Application Questions — including edits from a previous session. The Oct-1 note above
+  ("edits from step 2 onward are discarded") describes *unsaved in-step* state; **saved** steps persist.
+- What does NOT survive: the Voluntary Disclosures fields (Gender selection, DOB, Citizenship,
+  Terms checkbox) came back empty after 2 days, and the Terms checkbox alone reset after an
+  in-session bounce. Re-check that page on every resume.
+- Mid-flow **session reset**: the SPA can bounce itself to step 1 with no reload (stepper reads
+  "current step 1 of 5", Review-page `innerText` reads return 0 — the app is re-mounting). Recovery:
+  wait, then walk forward with Save and Continue on each step, re-verifying content as you pass
+  (every step had been saved). Do not reload manually; do not restart the flow.
+- Playwright locator clicks time out on this tenant's buttons (Apply, kebab, Save and Continue).
+  Working click: `evaluate` → `getBoundingClientRect` → `scrollIntoView` → `cua.click` at center,
+  focus/state verified after. `locator.check({force: true})` fails with "pointer probe returned no
+  click point" even on visibly-rendered checkboxes; a plain `cua.click` at the 24x24 square's center
+  toggles them (contrary to the 2026-10-01 note — that behavior is per-widget, verify state after
+  every click either way).
+- `:has(td:text("..."))` is not supported in locator CSS; use `:has-text("...")`.
