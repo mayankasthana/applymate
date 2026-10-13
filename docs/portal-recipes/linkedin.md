@@ -1173,6 +1173,32 @@ description never loads. Harvest `a[href*="safety/go"]`, decode the
 `url=` parameter, and fetch the JD from the ATS API (cxs / boards-api /
 smartrecruiters API) instead of fighting the LinkedIn page at all.
 
+## Sweep mechanics re-verified 2026-10-14 — and the JD-recovery ladder got shorter
+
+- The guest **search** endpoint (`seeMoreJobPostings/search`) still answers an
+  unauthenticated page-context fetch with 200 + 10 cards: 10 keyword/location
+  pairs → 86 unique postings in one sitting. `f_TPR=r604800` and the regex card
+  parse above held exactly as written.
+- The guest **jobPosting** endpoint now 429s a plain curl even with a browser UA
+  (challenge page, 24 KB of JS). The 2026-10-06 "dead" note stands; do not retry.
+- Warm-tab extraction (`goto` → ~4 s wait → Set-join of `body.innerText` +
+  `[class*='description']` text) hydrated the full description on roughly half
+  the postings. On the stragglers a `reload()` plus a 7 s wait did **not** help —
+  the description XHR is simply dead for those postings in that session. One
+  retry max, then move on.
+- Harvest the top-card Apply anchor's decoded `url=` on **every** grab, even
+  when the description hydrates: it is the canonical ATS req id and the
+  liveness-check target for later (Zscaler → Greenhouse 5233066007, eBay →
+  ebayinc req ids, ServiceNow → careers.servicenow.com req paths all came free
+  this way).
+- **The ATS-JD fallback has largely closed (2026-10-14).** Workday CXS answers
+  406/422 on the walmart/sabre/solera tenants; Phenom's `/api/apply/v2/jobs`
+  returns an HTML shell or a thin body on intuit/cisco/ecolab and 404 on
+  Teradata; `ats.rippling.com` (RSA) is Rippling's own ATS, not Ashby, so the
+  Ashby posting API 404s. When both LinkedIn hydration and ATS recovery fail,
+  mark the posting unscorable and hand the list to the candidate — do not stage
+  a guess.
+
 ## The InMail-accept send confirms LATE — do not double-send during the lag (verified 2026-10-07)
 
 **Goal:** reply on an inbound InMail via the custom-reply composer and *know* it went.
