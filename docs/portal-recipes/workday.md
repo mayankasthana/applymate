@@ -550,6 +550,15 @@ Disclosures → Review → Submit). Every finding below is from this one flow.
   Ladder observed in titles: Software Engineer I/II → Senior → Lead (≈Staff) → Principal →
   Manager/Director/VP (people track).
 
+## GE Vernova tenant `gevernova.wd5.myworkdayjobs.com/Vernova_ExternalSite` (verified 2026-10-14)
+
+- **cxs works on the standard shape** (`POST /wday/cxs/gevernova/vernova_externalsite/jobs`, `GET .../job/<path>`); hostname-first-label tenant rule holds. `canApply` in the JD payload is the liveness signal.
+- The careers page (`careers.gevernova.com`, Phenom-style) links both a **Conversational apply** (Paradox "Lumi" chatbot) and **Standard Apply** to the same Workday path. Use Standard Apply; never drive the chatbot.
+- **Create Account fields commit via `evaluate(focus) → fill("") → locator.type → Tab`**, and the account took first try (stepper 7→6 steps is the proof). Buttons/radios/dropdowns all dispatch cleanly via `evaluate(el => el.click())` — no coordinate clicks needed anywhere on this tenant so far.
+- **BUT on the My Information step the same commit path silently fails** — DOM values read back correct while every required-field error stays live and Save stays disabled (the Lilly note's `click-before-type` is not available here: locator `.click()` times out on these shadow-DOM inputs). The working path is the full JioStar trusted sequence per field: `scrollIntoView(center)` → `cua.click` at the rect center → `locator.evaluate(el => el.select())` → `cua.type` → `cua.keypress(["TAB"])`. After all fields, re-read the live `Error:` paragraphs (filter `offsetParent !== null`) — the error summary block at the top is stale from page load and never clears.
+- **"How Did You Hear About Us?" is a required typeahead whose suggest service returns zero options for automation** (typed "LinkedIn" and "Job" with trusted keystrokes, 3.5s waits, ArrowDown, Enter — nothing ever rendered; widget flips to `Minimized` with no chip; no datalist, no cached options in the wrapper). Same failure class as the JioStar tenant's Citizenship/Pronoun typeaheads; it renders for a human. Hand the single pick to the candidate — it gates Save and Continue, so nothing past My Information can proceed without it.
+- The State dropdown's option text carries diacritics — match `Mahārāshtra` exactly (`textContent.trim() === "Mahārāshtra"`), verify via the button's aria-label flip.
+
 ## Work-experience From/To date spinners share the DOB dead-widget class (verified 2026-10-14, JioStar tenant)
 
 - Goal: set or correct a work-experience From/To date (`dateSectionMonth-input` / `dateSectionYear-input`,
