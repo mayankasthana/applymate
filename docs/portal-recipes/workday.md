@@ -598,3 +598,25 @@ Disclosures → Review → Submit). Every finding below is from this one flow.
   toggles them (contrary to the 2026-10-01 note — that behavior is per-widget, verify state after
   every click either way).
 - `:has(td:text("..."))` is not supported in locator CSS; use `:has-text("...")`.
+
+## Feed sweep quirks per tenant (verified 2026-10-14, radar run across 4 tenants)
+
+The `wday/cxs/<tenant>/<Site>/jobs` bulk POST works on all tenants tried, but
+two per-tenant deviations matter for unattended sweeps:
+
+- **Mastercard (`mastercard.wd1`, site `CorporateCareers`) — the per-posting
+  job detail rejects POST.** `POST /wday/cxs/mastercard/CorporateCareers/job/<path>`
+  returns `{"errorCode":"HTTP_400"}` with an empty message, with or without a
+  body. The same path with **GET + `Accept: application/json`** returns the full
+  `jobPostingInfo` (title, jobDescription HTML, location). If a tenant 400s the
+  documented POST, try GET before giving up — verified working after the POST
+  failure on the same minute.
+- **Walmart (`walmart.wd504`, site `WalmartExternal`) — `searchText` is a
+  keyword, not a location facet.** `searchText:"India"` (and `"Bengaluru"`)
+  return US retail store jobs; `"India"`-style location filtering that works on
+  `lilly.wd115` does not transfer. Working sweep: `searchText:"software"`, then
+  filter client-side on `locationsText` starting with `IN-`. `postedOn` is
+  coarse ("Posted 30+ Days Ago" buckets) — this tenant cannot support FRESH
+  (<24h) flags from the feed.
+- GE Vernova's site segment for `gevernova.wd5` is `Vernova_ExternalSite`
+  (not `Careers`/`GECareers`).
