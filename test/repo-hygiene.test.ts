@@ -91,6 +91,9 @@ test("no file embeds a real-looking personal email", async (t) => {
       // RFC 2606/6761 reserve these TLDs for docs and tests — safe by construction.
       if (/\.(example|invalid|test|localhost)$/i.test(m[0])) continue;
       if (/@(example\.(com|org|net)|localhost|users\.noreply\.github\.com)\b/.test(m[0])) continue;
+      // System sender addresses documented in portal recipes (OTP mail, notifications)
+      // are site mechanics, not personal mailboxes.
+      if (/@workflow\.mail\.[a-z0-9.-]*cloud\.oracle\.com$/i.test(m[0])) continue;
       if (file === "package-lock.json") continue;
       offenders.push(`${file}: ${m[0]}`);
     }
